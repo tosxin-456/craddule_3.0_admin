@@ -19,10 +19,11 @@ import {
   Filter,
   Download,
   Clock,
-  AlertCircle
+  AlertCircle,
+  UserPlus
 } from "lucide-react";
 import { API_BASE_URL } from "../../config/apiConfig";
-
+import toast from "react-hot-toast";
 
 export default function AdminDocuments() {
   const [documents, setDocuments] = useState([]);
@@ -37,6 +38,8 @@ export default function AdminDocuments() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [sectorFilter, setSectorFilter] = useState("all");
+  const [selectedUserForModal, setSelectedUserForModal] = useState(null);
   const [newDocument, setNewDocument] = useState({
     userId: "",
     type: "CAC Certificate",
@@ -44,7 +47,9 @@ export default function AdminDocuments() {
     grants: "",
     expiry: "",
     issueDate: "",
-    documentNumber: ""
+    documentNumber: "",
+    targetType: "user",
+    sector: ""
   });
 
   const documentTypeConfig = {
@@ -99,6 +104,7 @@ export default function AdminDocuments() {
       });
       if (!res.ok) throw new Error("Failed to fetch documents");
       const data = await res.json();
+      console.log(data);
       setDocuments(data);
     } catch (err) {
       setError(err.message);
@@ -114,15 +120,25 @@ export default function AdminDocuments() {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
+      console.log(data);
       setUsers(data);
     } catch (err) {
       console.error(err);
     }
   }
 
+  function openAddModalForUser(user) {
+    setSelectedUserForModal(user);
+    setNewDocument({
+      ...newDocument,
+      userId: user.id.toString(),
+      targetType: "user"
+    });
+    setShowAddModal(true);
+  }
+
   async function handleAddDocumentForUser() {
     if (
-      !newDocument.userId ||
       !newDocument.type ||
       !newDocument.fullName ||
       !newDocument.grants ||
@@ -130,7 +146,17 @@ export default function AdminDocuments() {
       !newDocument.documentNumber ||
       !selectedFile
     ) {
-      alert("Please fill in all required fields and select a file");
+      toast.error("Please fill in all required fields and select a file");
+      return;
+    }
+
+    // Validate target selection
+    if (newDocument.targetType === "user" && !newDocument.userId) {
+      toast.error("Please select a user");
+      return;
+    }
+    if (newDocument.targetType === "sector" && !newDocument.sector) {
+      toast.error("Please select a sector");
       return;
     }
 
@@ -138,37 +164,35 @@ export default function AdminDocuments() {
       setIsSubmitting(true);
       const token = localStorage.getItem("token");
 
-      const targetUsers =
-        newDocument.userId === "all"
-          ? users
-          : users.filter((u) => u.id === parseInt(newDocument.userId));
+      const formData = new FormData();
+      formData.append("targetType", newDocument.targetType);
+      if (newDocument.targetType === "user")
+        formData.append("userId", newDocument.userId);
+      if (newDocument.targetType === "sector")
+        formData.append("sector", newDocument.sector);
+      formData.append("name", newDocument.type);
+      formData.append("fullName", newDocument.fullName);
+      formData.append("grants", newDocument.grants);
+      formData.append("expiryDate", newDocument.expiry || "");
+      formData.append("issueDate", newDocument.issueDate);
+      formData.append("documentNumber", newDocument.documentNumber);
+      formData.append("file", selectedFile);
 
-      for (const user of targetUsers) {
-        const formData = new FormData();
-        Object.entries({
-          userId: user.id,
-          name: newDocument.type,
-          fullName: newDocument.fullName,
-          grants: newDocument.grants,
-          expiryDate: newDocument.expiry || "",
-          issueDate: newDocument.issueDate,
-          documentNumber: newDocument.documentNumber
-        }).forEach(([key, value]) => formData.append(key, value));
-        formData.append("file", selectedFile);
+      const res = await fetch(`${API_BASE_URL}/admin/documents`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
 
-        const res = await fetch(`${API_BASE_URL}/admin/documents`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData
-        });
+      const data = await res.json();
 
-        if (!res.ok)
-          throw new Error("Failed to add document for " + user.fullName);
-      }
+      if (!res.ok) throw new Error(data.message || "Failed to add document");
 
-      alert("Document added successfully");
+      toast.success(data.message);
+
       setShowAddModal(false);
       setSelectedFile(null);
+      setSelectedUserForModal(null);
       setNewDocument({
         userId: "",
         type: "CAC Certificate",
@@ -176,11 +200,14 @@ export default function AdminDocuments() {
         grants: "",
         expiry: "",
         issueDate: "",
-        documentNumber: ""
+        documentNumber: "",
+        targetType: "user",
+        sector: ""
       });
+
       fetchDocuments();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -198,7 +225,7 @@ export default function AdminDocuments() {
       if (!res.ok) throw new Error("Failed to delete document");
       setDocuments(documents.filter((d) => d.id !== docId));
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     } finally {
       setActionLoading(null);
     }
@@ -259,6 +286,12 @@ export default function AdminDocuments() {
       const userLabel = userKey.split("|")[1].toLowerCase();
       const matchesSearch = userLabel.includes(searchQuery.toLowerCase());
 
+      // Get user sector for filtering
+      const userId = parseInt(userKey.split("|")[0]);
+      const user = users.find((u) => u.id === userId);
+      const matchesSector =
+        sectorFilter === "all" || (user && user.sector === sectorFilter);
+
       const hasMatchingDocs = userDocs.some((doc) => {
         const matchesStatus =
           statusFilter === "all" || doc.status === statusFilter;
@@ -266,7 +299,7 @@ export default function AdminDocuments() {
         return matchesStatus && matchesType;
       });
 
-      return matchesSearch && hasMatchingDocs;
+      return matchesSearch && matchesSector && hasMatchingDocs;
     }
   );
 
@@ -283,6 +316,7 @@ export default function AdminDocuments() {
     setSearchQuery("");
     setStatusFilter("all");
     setTypeFilter("all");
+    setSectorFilter("all");
   };
 
   const getTotalStats = () => {
@@ -294,7 +328,13 @@ export default function AdminDocuments() {
     };
   };
 
+  const getUniqueSectors = () => {
+    const sectors = users.map((u) => u.sector).filter(Boolean);
+    return [...new Set(sectors)].sort();
+  };
+
   const stats = getTotalStats();
+  const uniqueSectors = getUniqueSectors();
 
   if (loading)
     return (
@@ -337,7 +377,21 @@ export default function AdminDocuments() {
                 </p>
               </div>
               <button
-                onClick={() => setShowAddModal(true)}
+                onClick={() => {
+                  setSelectedUserForModal(null);
+                  setNewDocument({
+                    userId: "",
+                    type: "CAC Certificate",
+                    fullName: "",
+                    grants: "",
+                    expiry: "",
+                    issueDate: "",
+                    documentNumber: "",
+                    targetType: "user",
+                    sector: ""
+                  });
+                  setShowAddModal(true);
+                }}
                 className="flex items-center gap-2 px-5 py-3 rounded-xl bg-white text-blue-700 hover:bg-blue-50 font-semibold transition-all shadow-lg hover:shadow-xl hover:scale-105"
               >
                 <Plus className="w-5 h-5" />
@@ -425,7 +479,7 @@ export default function AdminDocuments() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -436,6 +490,19 @@ export default function AdminDocuments() {
                 className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
               />
             </div>
+
+            <select
+              value={sectorFilter}
+              onChange={(e) => setSectorFilter(e.target.value)}
+              className="px-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+            >
+              <option value="all">All Sectors</option>
+              {uniqueSectors.map((sector) => (
+                <option key={sector} value={sector}>
+                  {sector}
+                </option>
+              ))}
+            </select>
 
             <select
               value={statusFilter}
@@ -462,7 +529,10 @@ export default function AdminDocuments() {
             </select>
           </div>
 
-          {(searchQuery || statusFilter !== "all" || typeFilter !== "all") && (
+          {(searchQuery ||
+            statusFilter !== "all" ||
+            typeFilter !== "all" ||
+            sectorFilter !== "all") && (
             <div className="flex flex-wrap items-center gap-2 mt-5 pt-5 border-t border-gray-200">
               <span className="text-sm font-medium text-gray-600">
                 Active filters:
@@ -471,6 +541,11 @@ export default function AdminDocuments() {
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium border border-blue-200">
                   <Search className="w-3 h-3" />
                   {searchQuery}
+                </span>
+              )}
+              {sectorFilter !== "all" && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium border border-indigo-200">
+                  Sector: {sectorFilter}
                 </span>
               )}
               {statusFilter !== "all" && (
@@ -503,7 +578,10 @@ export default function AdminDocuments() {
               No Documents Found
             </h3>
             <p className="text-gray-500">
-              {searchQuery || statusFilter !== "all" || typeFilter !== "all"
+              {searchQuery ||
+              statusFilter !== "all" ||
+              typeFilter !== "all" ||
+              sectorFilter !== "all"
                 ? "Try adjusting your filters to see more results"
                 : "No documents have been submitted yet"}
             </p>
@@ -512,6 +590,8 @@ export default function AdminDocuments() {
           <div className="space-y-4">
             {filteredUserGroups.map(([userKey, userDocs]) => {
               const userLabel = userKey.split("|")[1];
+              const userId = parseInt(userKey.split("|")[0]);
+              const user = users.find((u) => u.id === userId);
               const filteredDocs = getFilteredDocs(userDocs);
               const isExpanded = expandedUsers[userKey];
 
@@ -520,11 +600,11 @@ export default function AdminDocuments() {
                   key={userKey}
                   className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
                 >
-                  <button
-                    onClick={() => toggleUserExpanded(userKey)}
-                    className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors group"
-                  >
-                    <div className="flex items-center gap-4">
+                  <div className="flex items-center justify-between p-5 hover:bg-gray-50 transition-colors group">
+                    <button
+                      onClick={() => toggleUserExpanded(userKey)}
+                      className="flex items-center gap-4 flex-1"
+                    >
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
                         {userLabel.charAt(0).toUpperCase()}
                       </div>
@@ -532,13 +612,30 @@ export default function AdminDocuments() {
                         <h2 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
                           {userLabel}
                         </h2>
-                        <p className="text-sm text-gray-500 font-medium">
-                          {filteredDocs.length} document
-                          {filteredDocs.length !== 1 ? "s" : ""}
-                        </p>
+                        <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
+                          <span>
+                            {filteredDocs.length} document
+                            {filteredDocs.length !== 1 ? "s" : ""}
+                          </span>
+                          {user && user.sector && (
+                            <>
+                              <span>•</span>
+                              <span className="text-blue-600">
+                                {user.sector}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => user && openAddModalForUser(user)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        Add Document
+                      </button>
                       <div className="hidden sm:flex items-center gap-2">
                         {filteredDocs.some((d) => d.status === "Active") && (
                           <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">
@@ -559,15 +656,18 @@ export default function AdminDocuments() {
                           </span>
                         )}
                       </div>
-                      <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-gray-200 flex items-center justify-center transition-colors">
+                      <button
+                        onClick={() => toggleUserExpanded(userKey)}
+                        className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-gray-200 flex items-center justify-center transition-colors"
+                      >
                         {isExpanded ? (
                           <ChevronUp className="w-5 h-5 text-gray-600" />
                         ) : (
                           <ChevronDown className="w-5 h-5 text-gray-600" />
                         )}
-                      </div>
+                      </button>
                     </div>
-                  </button>
+                  </div>
 
                   {isExpanded && (
                     <div className="border-t border-gray-100 bg-gray-50 p-5">
@@ -635,28 +735,38 @@ export default function AdminDocuments() {
                                           <span className="font-medium">
                                             Expires:
                                           </span>{" "}
-                                          {doc.expiryDate || "Perpetual"}
+                                          {doc.expiryDate || "N/A"}
                                         </p>
                                       </div>
                                     </div>
                                   </div>
 
-                                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-4 border-t border-gray-200">
+                                  <div className="flex flex-wrap gap-2 pt-2">
                                     <a
                                       href={doc.fileUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
+                                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
                                     >
                                       <Eye className="w-4 h-4" />
                                       View Document
                                     </a>
+
+                                    <a
+                                      href={doc.fileUrl}
+                                      download
+                                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
+                                    >
+                                      <Download className="w-4 h-4" />
+                                      Download
+                                    </a>
+
                                     <button
-                                      disabled={actionLoading === doc.id}
                                       onClick={() =>
                                         handleDeleteDocument(doc.id)
                                       }
-                                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-red-200 hover:bg-red-50 text-red-600 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                      disabled={actionLoading === doc.id}
+                                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       {actionLoading === doc.id ? (
                                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -680,45 +790,107 @@ export default function AdminDocuments() {
           </div>
         )}
       </div>
+
       {/* Add Document Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 flex items-center justify-between z-10 rounded-t-xl">
-              <h2 className="text-lg font-bold">Add New Document</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-700 p-6 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">
+                {selectedUserForModal
+                  ? `Add Document for ${selectedUserForModal.fullName}`
+                  : "Add New Document"}
+              </h2>
               <button
-                onClick={() => setShowAddModal(false)}
-                className="p-2 hover:bg-blue-500 rounded-lg transition-colors"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSelectedFile(null);
+                  setSelectedUserForModal(null);
+                }}
+                className="w-8 h-8 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 flex items-center justify-center transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-black" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              {/* Select User */}
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  Select User *
-                </label>
-                <select
-                  value={newDocument.userId}
-                  onChange={(e) =>
-                    setNewDocument({ ...newDocument, userId: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Select User --</option>
-                  <option value="all">All Users</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.fullName} ({user.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              {/* Document Type */}
+            <div className="p-6 space-y-5">
+              {!selectedUserForModal && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Target
+                    </label>
+                    <select
+                      value={newDocument.targetType}
+                      onChange={(e) =>
+                        setNewDocument({
+                          ...newDocument,
+                          targetType: e.target.value
+                        })
+                      }
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="user">Specific User</option>
+                      <option value="sector">All Users in Sector</option>
+                      <option value="all">All Users</option>
+                    </select>
+                  </div>
+
+                  {newDocument.targetType === "user" && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Select User *
+                      </label>
+                      <select
+                        value={newDocument.userId}
+                        onChange={(e) =>
+                          setNewDocument({
+                            ...newDocument,
+                            userId: e.target.value
+                          })
+                        }
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Choose a user...</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.fullName} ({u.email}){" "}
+                            {u.sector && `- ${u.sector}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {newDocument.targetType === "sector" && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Select Sector *
+                      </label>
+                      <select
+                        value={newDocument.sector}
+                        onChange={(e) =>
+                          setNewDocument({
+                            ...newDocument,
+                            sector: e.target.value
+                          })
+                        }
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Choose a sector...</option>
+                        {uniqueSectors.map((sector) => (
+                          <option key={sector} value={sector}>
+                            {sector}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
+
               <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Document Type *
                 </label>
                 <select
@@ -726,7 +898,7 @@ export default function AdminDocuments() {
                   onChange={(e) =>
                     setNewDocument({ ...newDocument, type: e.target.value })
                   }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {Object.keys(documentTypeConfig).map((type) => (
                     <option key={type} value={type}>
@@ -736,10 +908,9 @@ export default function AdminDocuments() {
                 </select>
               </div>
 
-              {/* Full Name */}
               <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  Full Document Name *
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Full Name *
                 </label>
                 <input
                   type="text"
@@ -747,75 +918,13 @@ export default function AdminDocuments() {
                   onChange={(e) =>
                     setNewDocument({ ...newDocument, fullName: e.target.value })
                   }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Corporate Affairs Commission Registration"
+                  placeholder="Enter full name on document"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              {/* Upload File */}
               <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  Upload Document File *
-                </label>
-                <input
-                  type="file"
-                  onChange={(e) => setSelectedFile(e.target.files[0])}
-                  className="w-full text-base border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Grants */}
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  What This Document Grants *
-                </label>
-                <textarea
-                  value={newDocument.grants}
-                  onChange={(e) =>
-                    setNewDocument({ ...newDocument, grants: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows="3"
-                  placeholder="e.g., Legal business existence and corporate identity"
-                />
-              </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2 text-gray-700">
-                    Issue Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={newDocument.issueDate}
-                    onChange={(e) =>
-                      setNewDocument({
-                        ...newDocument,
-                        issueDate: e.target.value
-                      })
-                    }
-                    className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-2 text-gray-700">
-                    Expiry Date
-                  </label>
-                  <input
-                    type="date"
-                    value={newDocument.expiry}
-                    onChange={(e) =>
-                      setNewDocument({ ...newDocument, expiry: e.target.value })
-                    }
-                    className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Document Number */}
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Document Number *
                 </label>
                 <input
@@ -827,27 +936,101 @@ export default function AdminDocuments() {
                       documentNumber: e.target.value
                     })
                   }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., RC-1234567"
+                  placeholder="Enter document number"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              {/* Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Grants *
+                </label>
+                <textarea
+                  value={newDocument.grants}
+                  onChange={(e) =>
+                    setNewDocument({ ...newDocument, grants: e.target.value })
+                  }
+                  placeholder="Enter what this document grants"
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Issue Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={newDocument.issueDate}
+                    onChange={(e) =>
+                      setNewDocument({
+                        ...newDocument,
+                        issueDate: e.target.value
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Expiry Date
+                  </label>
+                  <input
+                    type="date"
+                    value={newDocument.expiry}
+                    onChange={(e) =>
+                      setNewDocument({ ...newDocument, expiry: e.target.value })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Upload Document *
+                </label>
+                <input
+                  type="file"
+                  onChange={(e) => setSelectedFile(e.target.files[0])}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {selectedFile && (
+                  <p className="mt-2 text-sm text-gray-600">
+                    Selected: {selectedFile.name}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-4">
                 <button
                   onClick={handleAddDocumentForUser}
                   disabled={isSubmitting}
-                  className={`flex-1 px-6 py-3 rounded-lg font-medium text-base transition-colors ${
-                    isSubmitting
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
-                  }`}
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? "Adding..." : "Add Document"}
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-5 h-5" />
+                      Add Document
+                    </>
+                  )}
                 </button>
                 <button
-                  onClick={() => setShowAddModal(false)}
-                  className="px-6 py-3 rounded-lg border hover:bg-gray-50 font-medium text-base transition-colors"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setSelectedFile(null);
+                    setSelectedUserForModal(null);
+                  }}
+                  disabled={isSubmitting}
+                  className="px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>

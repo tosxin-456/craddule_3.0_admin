@@ -10,6 +10,7 @@ import {
   Filter
 } from "lucide-react";
 import { API_BASE_URL } from "../../config/apiConfig";
+import toast from "react-hot-toast";
 
 export default function AdminOnboarding() {
   const [reviews, setReviews] = useState([]);
@@ -80,7 +81,7 @@ export default function AdminOnboarding() {
       // Refresh list after decision
       fetchReviews();
     } catch (err) {
-      alert(err.message || "Update failed");
+      toast.error(err.message || "Update failed");
     }
   }
 

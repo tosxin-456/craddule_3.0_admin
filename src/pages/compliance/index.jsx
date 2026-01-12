@@ -16,10 +16,11 @@ import {
   FileText,
   Activity,
   Plus,
-  X
+  X,
+  UserPlus
 } from "lucide-react";
-
 import { API_BASE_URL } from "../../config/apiConfig";
+import toast from "react-hot-toast";
 
 export default function AdminCompliance() {
   const [items, setItems] = useState([]);
@@ -30,14 +31,18 @@ export default function AdminCompliance() {
   const [expandedUsers, setExpandedUsers] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sectorFilter, setSectorFilter] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedUserForModal, setSelectedUserForModal] = useState(null);
   const [newCompliance, setNewCompliance] = useState({
     userId: "",
     title: "",
     description: "",
     cost: "",
-    status: "Pending"
+    status: "Pending",
+    targetType: "user",
+    sector: ""
   });
 
   const token = localStorage.getItem("token");
@@ -98,7 +103,7 @@ export default function AdminCompliance() {
 
       fetchCompliance();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     }
   }
 
@@ -109,36 +114,28 @@ export default function AdminCompliance() {
       !newCompliance.description ||
       !newCompliance.cost
     ) {
-      alert("Please fill in all required fields");
+      toast.error("Please fill in all required fields");
       return;
     }
 
     try {
       setIsSubmitting(true);
+      const token = localStorage.getItem("token");
 
-      const targetUsers =
-        newCompliance.userId === "all"
-          ? users
-          : users.filter((u) => u.id === parseInt(newCompliance.userId));
+      const res = await fetch(`${API_BASE_URL}/admin/compliances`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(newCompliance)
+      });
 
-      for (const user of targetUsers) {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      const data = await res.json();
 
-        const newItem = {
-          id: Date.now() + Math.random(),
-          title: newCompliance.title,
-          description: newCompliance.description,
-          cost: newCompliance.cost,
-          status: newCompliance.status,
-          formData: null,
-          User: { id: user.id, fullName: user.fullName, email: user.email }
-        };
+      if (!res.ok) throw new Error(data.message || "Failed to add compliance");
 
-        setItems((prev) => [...prev, newItem]);
-      }
-
-      alert("Compliance item added successfully");
+      toast.success(data.message);
       setShowAddModal(false);
       setNewCompliance({
         userId: "",
@@ -147,10 +144,36 @@ export default function AdminCompliance() {
         cost: "",
         status: "Pending"
       });
+
+      fetchCompliance(); // refresh list from backend
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleRemoveCompliance(id) {
+    if (!confirm("Remove this compliance item permanently?")) return;
+
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_BASE_URL}/admin/compliances/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.message || "Failed to remove compliance");
+
+      toast.success(data.message);
+      fetchCompliance(); // refresh list
+    } catch (err) {
+      toast.error(err.message);
     }
   }
 
@@ -169,11 +192,136 @@ export default function AdminCompliance() {
 
       fetchCompliance();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     }
   }
 
-  // 🔹 Group by user (like documents)
+  function openAddModalForUser(user) {
+    setSelectedUserForModal(user);
+    setNewCompliance({
+      userId: user.id.toString(),
+      title: "",
+      description: "",
+      cost: "",
+      status: "Pending",
+      targetType: "user",
+      sector: ""
+    });
+    setShowAddModal(true);
+  }
+
+  async function handleResolve(id) {
+    if (!confirm("Mark this compliance item as completed?")) return;
+
+    try {
+      setActionLoading(id);
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      setItems(
+        items.map((item) =>
+          item.id === id ? { ...item, status: "Completed" } : item
+        )
+      );
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleAddCompliance() {
+    if (
+      !newCompliance.title ||
+      !newCompliance.description ||
+      !newCompliance.cost
+    ) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    // Validate target selection
+    if (newCompliance.targetType === "user" && !newCompliance.userId) {
+      toast.error("Please select a user");
+      return;
+    }
+    if (newCompliance.targetType === "sector" && !newCompliance.sector) {
+      toast.error("Please select a sector");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      let targetUsers = [];
+
+      if (newCompliance.targetType === "all") {
+        targetUsers = users;
+      } else if (newCompliance.targetType === "sector") {
+        targetUsers = users.filter((u) => u.sector === newCompliance.sector);
+      } else {
+        targetUsers = users.filter(
+          (u) => u.id === parseInt(newCompliance.userId)
+        );
+      }
+
+      if (targetUsers.length === 0) {
+        toast.error("No users found matching the selected criteria");
+        setIsSubmitting(false);
+        return;
+      }
+
+      for (const user of targetUsers) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        const newItem = {
+          id: Date.now() + Math.random(),
+          title: newCompliance.title,
+          description: newCompliance.description,
+          cost: newCompliance.cost,
+          status: newCompliance.status,
+          formData: null,
+          User: { id: user.id, fullName: user.fullName, email: user.email }
+        };
+
+        setItems((prev) => [...prev, newItem]);
+      }
+
+      toast.success(
+        `Compliance item added successfully to ${targetUsers.length} user(s)`
+      );
+      setShowAddModal(false);
+      setSelectedUserForModal(null);
+      setNewCompliance({
+        userId: "",
+        title: "",
+        description: "",
+        cost: "",
+        status: "Pending",
+        targetType: "user",
+        sector: ""
+      });
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleRemove(id) {
+    if (!confirm("Remove this compliance item permanently?")) return;
+
+    try {
+      setActionLoading(id);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      setItems(items.filter((item) => item.id !== id));
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   const complianceByUser = items.reduce((acc, item) => {
     const userKey = item.User
       ? `${item.User.id}|${item.User.fullName} (${item.User.email})`
@@ -228,13 +376,18 @@ export default function AdminCompliance() {
       const userLabel = userKey.split("|")[1].toLowerCase();
       const matchesSearch = userLabel.includes(searchQuery.toLowerCase());
 
+      const userId = parseInt(userKey.split("|")[0]);
+      const user = users.find((u) => u.id === userId);
+      const matchesSector =
+        sectorFilter === "all" || (user && user.sector === sectorFilter);
+
       const hasMatchingItems = userItems.some((item) => {
         const matchesStatus =
           statusFilter === "all" || item.status === statusFilter;
         return matchesStatus;
       });
 
-      return matchesSearch && hasMatchingItems;
+      return matchesSearch && matchesSector && hasMatchingItems;
     }
   );
 
@@ -249,6 +402,7 @@ export default function AdminCompliance() {
   const clearFilters = () => {
     setSearchQuery("");
     setStatusFilter("all");
+    setSectorFilter("all");
   };
 
   const getTotalStats = () => {
@@ -260,12 +414,18 @@ export default function AdminCompliance() {
     };
   };
 
+  const getUniqueSectors = () => {
+    const sectors = users.map((u) => u.sector).filter(Boolean);
+    return [...new Set(sectors)].sort();
+  };
+
   const stats = getTotalStats();
+  const uniqueSectors = getUniqueSectors();
 
   if (loading)
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-red-600" />
         <p className="text-sm text-gray-500 font-medium">
           Loading compliance items...
         </p>
@@ -304,7 +464,19 @@ export default function AdminCompliance() {
                 </p>
               </div>
               <button
-                onClick={() => setShowAddModal(true)}
+                onClick={() => {
+                  setSelectedUserForModal(null);
+                  setNewCompliance({
+                    userId: "",
+                    title: "",
+                    description: "",
+                    cost: "",
+                    status: "Pending",
+                    targetType: "user",
+                    sector: ""
+                  });
+                  setShowAddModal(true);
+                }}
                 className="flex items-center gap-2 px-5 py-3 rounded-xl bg-white text-red-700 hover:bg-red-50 font-semibold transition-all shadow-lg hover:shadow-xl hover:scale-105"
               >
                 <Plus className="w-5 h-5" />
@@ -392,7 +564,7 @@ export default function AdminCompliance() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -403,6 +575,19 @@ export default function AdminCompliance() {
                 className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-shadow"
               />
             </div>
+
+            <select
+              value={sectorFilter}
+              onChange={(e) => setSectorFilter(e.target.value)}
+              className="px-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
+            >
+              <option value="all">All Sectors</option>
+              {uniqueSectors.map((sector) => (
+                <option key={sector} value={sector}>
+                  {sector}
+                </option>
+              ))}
+            </select>
 
             <select
               value={statusFilter}
@@ -416,7 +601,9 @@ export default function AdminCompliance() {
             </select>
           </div>
 
-          {(searchQuery || statusFilter !== "all") && (
+          {(searchQuery ||
+            statusFilter !== "all" ||
+            sectorFilter !== "all") && (
             <div className="flex flex-wrap items-center gap-2 mt-5 pt-5 border-t border-gray-200">
               <span className="text-sm font-medium text-gray-600">
                 Active filters:
@@ -425,6 +612,11 @@ export default function AdminCompliance() {
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 rounded-full text-xs font-medium border border-red-200">
                   <Search className="w-3 h-3" />
                   {searchQuery}
+                </span>
+              )}
+              {sectorFilter !== "all" && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium border border-indigo-200">
+                  Sector: {sectorFilter}
                 </span>
               )}
               {statusFilter !== "all" && (
@@ -452,7 +644,7 @@ export default function AdminCompliance() {
               No Compliance Items Found
             </h3>
             <p className="text-gray-500">
-              {searchQuery || statusFilter !== "all"
+              {searchQuery || statusFilter !== "all" || sectorFilter !== "all"
                 ? "Try adjusting your filters to see more results"
                 : "No compliance submissions have been made yet"}
             </p>
@@ -461,6 +653,8 @@ export default function AdminCompliance() {
           <div className="space-y-4">
             {filteredUserGroups.map(([userKey, userItems]) => {
               const userLabel = userKey.split("|")[1];
+              const userId = parseInt(userKey.split("|")[0]);
+              const user = users.find((u) => u.id === userId);
               const filteredItems = getFilteredItems(userItems);
               const isExpanded = expandedUsers[userKey];
 
@@ -469,11 +663,11 @@ export default function AdminCompliance() {
                   key={userKey}
                   className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
                 >
-                  <button
-                    onClick={() => toggleUserExpanded(userKey)}
-                    className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors group"
-                  >
-                    <div className="flex items-center gap-4">
+                  <div className="flex items-center justify-between p-5 hover:bg-gray-50 transition-colors group">
+                    <button
+                      onClick={() => toggleUserExpanded(userKey)}
+                      className="flex items-center gap-4 flex-1"
+                    >
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
                         {userLabel.charAt(0).toUpperCase()}
                       </div>
@@ -481,13 +675,30 @@ export default function AdminCompliance() {
                         <h2 className="text-lg font-bold text-gray-900 group-hover:text-red-600 transition-colors">
                           {userLabel}
                         </h2>
-                        <p className="text-sm text-gray-500 font-medium">
-                          {filteredItems.length} compliance item
-                          {filteredItems.length !== 1 ? "s" : ""}
-                        </p>
+                        <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
+                          <span>
+                            {filteredItems.length} compliance item
+                            {filteredItems.length !== 1 ? "s" : ""}
+                          </span>
+                          {user && user.sector && (
+                            <>
+                              <span>•</span>
+                              <span className="text-red-600">
+                                {user.sector}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => user && openAddModalForUser(user)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        Add Compliance
+                      </button>
                       <div className="hidden sm:flex items-center gap-2">
                         {filteredItems.some(
                           (d) => d.status === "Completed"
@@ -512,15 +723,18 @@ export default function AdminCompliance() {
                           </span>
                         )}
                       </div>
-                      <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-gray-200 flex items-center justify-center transition-colors">
+                      <button
+                        onClick={() => toggleUserExpanded(userKey)}
+                        className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-gray-200 flex items-center justify-center transition-colors"
+                      >
                         {isExpanded ? (
                           <ChevronUp className="w-5 h-5 text-gray-600" />
                         ) : (
                           <ChevronDown className="w-5 h-5 text-gray-600" />
                         )}
-                      </div>
+                      </button>
                     </div>
-                  </button>
+                  </div>
 
                   {isExpanded && (
                     <div className="border-t border-gray-100 bg-gray-50 p-5">
@@ -551,7 +765,7 @@ export default function AdminCompliance() {
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                      {/* < className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" /> */}
+                                      <DollarSign className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
                                       <div className="min-w-0">
                                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                           Cost
@@ -578,11 +792,11 @@ export default function AdminCompliance() {
                                     )}
                                   </div>
 
-                                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-4 border-t border-gray-200">
+                                  <div className="flex flex-wrap gap-2 pt-2">
                                     {item.formData && (
                                       <button
                                         onClick={() =>
-                                          alert(
+                                          toast.success(
                                             JSON.stringify(
                                               item.formData,
                                               null,
@@ -590,7 +804,7 @@ export default function AdminCompliance() {
                                             )
                                           )
                                         }
-                                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
+                                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
                                       >
                                         <Eye className="w-4 h-4" />
                                         View Details
@@ -601,7 +815,7 @@ export default function AdminCompliance() {
                                       <button
                                         disabled={actionLoading === item.id}
                                         onClick={() => handleResolve(item.id)}
-                                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
                                       >
                                         {actionLoading === item.id ? (
                                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -615,7 +829,7 @@ export default function AdminCompliance() {
                                     <button
                                       disabled={actionLoading === item.id}
                                       onClick={() => handleRemove(item.id)}
-                                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-red-200 hover:bg-red-50 text-red-600 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
                                     >
                                       {actionLoading === item.id ? (
                                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -639,49 +853,112 @@ export default function AdminCompliance() {
           </div>
         )}
       </div>
+
       {/* Add Compliance Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-gradient-to-r from-red-600 to-red-700 text-white p-4 flex items-center justify-between z-10 rounded-t-xl">
-              <h2 className="text-lg font-bold">Add New Compliance Item</h2>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-red-600 to-orange-700 p-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-1">
+                  Add Compliance Item
+                </h2>
+                <p className="text-red-100 text-sm">
+                  {selectedUserForModal
+                    ? `Adding to ${selectedUserForModal.fullName}`
+                    : "Create a new compliance requirement"}
+                </p>
+              </div>
               <button
-                onClick={() => setShowAddModal(false)}
-                className="p-2 hover:bg-red-500 rounded-lg transition-colors"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSelectedUserForModal(null);
+                }}
+                className="w-10 h-10 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6 text-white" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              {/* Select User */}
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  Select User *
-                </label>
-                <select
-                  value={newCompliance.userId}
-                  onChange={(e) =>
-                    setNewCompliance({
-                      ...newCompliance,
-                      userId: e.target.value
-                    })
-                  }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-red-500"
-                >
-                  <option value="">-- Select User --</option>
-                  <option value="all">All Users</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.fullName} ({user.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              {/* Title */}
+            <div className="p-6 space-y-5">
+              {!selectedUserForModal && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Target
+                  </label>
+                  <select
+                    value={newCompliance.targetType}
+                    onChange={(e) =>
+                      setNewCompliance({
+                        ...newCompliance,
+                        targetType: e.target.value,
+                        userId: "",
+                        sector: ""
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
+                  >
+                    <option value="user">Single User</option>
+                    <option value="sector">Sector</option>
+                    <option value="all">All Users</option>
+                  </select>
+                </div>
+              )}
+
+              {!selectedUserForModal && newCompliance.targetType === "user" && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Select User *
+                  </label>
+                  <select
+                    value={newCompliance.userId}
+                    onChange={(e) =>
+                      setNewCompliance({
+                        ...newCompliance,
+                        userId: e.target.value
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
+                  >
+                    <option value="">Choose a user...</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.fullName} ({user.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {!selectedUserForModal &&
+                newCompliance.targetType === "sector" && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Select Sector *
+                    </label>
+                    <select
+                      value={newCompliance.sector}
+                      onChange={(e) =>
+                        setNewCompliance({
+                          ...newCompliance,
+                          sector: e.target.value
+                        })
+                      }
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
+                    >
+                      <option value="">Choose a sector...</option>
+                      {uniqueSectors.map((sector) => (
+                        <option key={sector} value={sector}>
+                          {sector}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
               <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  Compliance Title *
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Title *
                 </label>
                 <input
                   type="text"
@@ -692,14 +969,13 @@ export default function AdminCompliance() {
                       title: e.target.value
                     })
                   }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="e.g., Annual Tax Filing"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
               </div>
 
-              {/* Description */}
               <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Description *
                 </label>
                 <textarea
@@ -710,16 +986,15 @@ export default function AdminCompliance() {
                       description: e.target.value
                     })
                   }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-red-500"
-                  rows="3"
-                  placeholder="Describe what this compliance requirement entails..."
+                  placeholder="Provide details about this compliance requirement..."
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
                 />
               </div>
 
-              {/* Cost */}
               <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  Cost *
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Cost (₦) *
                 </label>
                 <input
                   type="text"
@@ -727,15 +1002,14 @@ export default function AdminCompliance() {
                   onChange={(e) =>
                     setNewCompliance({ ...newCompliance, cost: e.target.value })
                   }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-red-500"
-                  placeholder="e.g., $500"
+                  placeholder="e.g., 50000"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
               </div>
 
-              {/* Status */}
               <div>
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  Initial Status *
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Status
                 </label>
                 <select
                   value={newCompliance.status}
@@ -745,34 +1019,43 @@ export default function AdminCompliance() {
                       status: e.target.value
                     })
                   }
-                  className="w-full px-4 py-2.5 border rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
                 >
                   <option value="Pending">Pending</option>
                   <option value="Completed">Completed</option>
                   <option value="Overdue">Overdue</option>
                 </select>
               </div>
+            </div>
 
-              {/* Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                <button
-                  onClick={handleAddCompliance}
-                  disabled={isSubmitting}
-                  className={`flex-1 px-6 py-3 rounded-lg font-medium text-base transition-colors ${
-                    isSubmitting
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-red-600 hover:bg-red-700 text-white shadow-md"
-                  }`}
-                >
-                  {isSubmitting ? "Adding..." : "Add Compliance Item"}
-                </button>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="px-6 py-3 rounded-lg border hover:bg-gray-50 font-medium text-base transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-6 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSelectedUserForModal(null);
+                }}
+                disabled={isSubmitting}
+                className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddCompliance}
+                disabled={isSubmitting}
+                className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-red-600 to-orange-700 text-white font-semibold hover:from-red-700 hover:to-orange-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5" />
+                    Add Compliance
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

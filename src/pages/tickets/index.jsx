@@ -15,6 +15,7 @@ import {
   Archive
 } from "lucide-react";
 import { API_BASE_URL } from "../../config/apiConfig";
+import toast from "react-hot-toast";
 
 export default function AdminTickets() {
   const [tickets, setTickets] = useState([]);
@@ -56,7 +57,7 @@ export default function AdminTickets() {
       });
       fetchTickets();
     } catch (err) {
-      alert("Failed to update status");
+      toast.error("Failed to update status");
     }
   }
 
@@ -77,7 +78,7 @@ export default function AdminTickets() {
       setSelectedTicket(null);
       fetchTickets();
     } catch (err) {
-      alert("Failed to send reply");
+      toast.error("Failed to send reply");
     }
   }
 

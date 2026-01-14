@@ -13,16 +13,18 @@ import {
   Building2,
   Shield,
   Receipt,
-  ChevronDown,
-  ChevronUp,
   Search,
   Filter,
   Download,
   Clock,
   AlertCircle,
-  UserPlus
+  Folder,
+  FolderOpen,
+  File,
+  Upload,
+  Users
 } from "lucide-react";
-import { API_BASE_URL } from "../../config/apiConfig";
+import { API_BASE_URL, IMAGE_URL } from "../../config/apiConfig";
 import toast from "react-hot-toast";
 
 export default function AdminDocuments() {
@@ -34,11 +36,12 @@ export default function AdminDocuments() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [expandedUsers, setExpandedUsers] = useState({});
+  const [openFolder, setOpenFolder] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [sectorFilter, setSectorFilter] = useState("all");
+  const [viewMode, setViewMode] = useState("grid"); // 'grid' or 'list'
   const [selectedUserForModal, setSelectedUserForModal] = useState(null);
   const [newDocument, setNewDocument] = useState({
     userId: "",
@@ -104,7 +107,6 @@ export default function AdminDocuments() {
       });
       if (!res.ok) throw new Error("Failed to fetch documents");
       const data = await res.json();
-      console.log(data);
       setDocuments(data);
     } catch (err) {
       setError(err.message);
@@ -120,7 +122,6 @@ export default function AdminDocuments() {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
-      console.log(data);
       setUsers(data);
     } catch (err) {
       console.error(err);
@@ -150,7 +151,6 @@ export default function AdminDocuments() {
       return;
     }
 
-    // Validate target selection
     if (newDocument.targetType === "user" && !newDocument.userId) {
       toast.error("Please select a user");
       return;
@@ -224,6 +224,7 @@ export default function AdminDocuments() {
       });
       if (!res.ok) throw new Error("Failed to delete document");
       setDocuments(documents.filter((d) => d.id !== docId));
+      toast.success("Document deleted successfully");
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -263,48 +264,39 @@ export default function AdminDocuments() {
     );
   };
 
-  const toggleUserExpanded = (userKey) => {
-    setExpandedUsers((prev) => ({
-      ...prev,
-      [userKey]: !prev[userKey]
-    }));
-  };
-
   const documentsByUser = documents.reduce((acc, doc) => {
-    const userKey =
-      doc.userId +
-      (doc.User
-        ? `|${doc.User.fullName} (${doc.User.email})`
-        : "|Unknown User");
-    if (!acc[userKey]) acc[userKey] = [];
-    acc[userKey].push(doc);
+    const userId = doc.userId;
+    if (!acc[userId]) {
+      const user = users.find((u) => u.id === userId);
+      acc[userId] = {
+        user: user || { id: userId, fullName: "Unknown User", email: "" },
+        documents: []
+      };
+    }
+    acc[userId].documents.push(doc);
     return acc;
   }, {});
 
-  const filteredUserGroups = Object.entries(documentsByUser).filter(
-    ([userKey, userDocs]) => {
-      const userLabel = userKey.split("|")[1].toLowerCase();
-      const matchesSearch = userLabel.includes(searchQuery.toLowerCase());
+  const filteredFolders = Object.values(documentsByUser).filter((folder) => {
+    const user = folder.user;
+    const userLabel = `${user.fullName} ${user.email}`.toLowerCase();
+    const matchesSearch = userLabel.includes(searchQuery.toLowerCase());
 
-      // Get user sector for filtering
-      const userId = parseInt(userKey.split("|")[0]);
-      const user = users.find((u) => u.id === userId);
-      const matchesSector =
-        sectorFilter === "all" || (user && user.sector === sectorFilter);
+    const matchesSector =
+      sectorFilter === "all" || user.sector === sectorFilter;
 
-      const hasMatchingDocs = userDocs.some((doc) => {
-        const matchesStatus =
-          statusFilter === "all" || doc.status === statusFilter;
-        const matchesType = typeFilter === "all" || doc.name === typeFilter;
-        return matchesStatus && matchesType;
-      });
+    const hasMatchingDocs = folder.documents.some((doc) => {
+      const matchesStatus =
+        statusFilter === "all" || doc.status === statusFilter;
+      const matchesType = typeFilter === "all" || doc.name === typeFilter;
+      return matchesStatus && matchesType;
+    });
 
-      return matchesSearch && matchesSector && hasMatchingDocs;
-    }
-  );
+    return matchesSearch && matchesSector && hasMatchingDocs;
+  });
 
-  const getFilteredDocs = (userDocs) => {
-    return userDocs.filter((doc) => {
+  const getFilteredDocs = (docs) => {
+    return docs.filter((doc) => {
       const matchesStatus =
         statusFilter === "all" || doc.status === statusFilter;
       const matchesType = typeFilter === "all" || doc.name === typeFilter;
@@ -324,7 +316,8 @@ export default function AdminDocuments() {
       total: documents.length,
       active: documents.filter((d) => d.status === "Active").length,
       expiring: documents.filter((d) => d.status === "Expiring Soon").length,
-      expired: documents.filter((d) => d.status === "Expired").length
+      expired: documents.filter((d) => d.status === "Expired").length,
+      users: Object.keys(documentsByUser).length
     };
   };
 
@@ -364,16 +357,16 @@ export default function AdminDocuments() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header with Stats */}
+        {/* Header */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
           <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 p-6 sm:p-8">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
               <div>
                 <h1 className="text-3xl font-bold text-white mb-2">
-                  Documents Review
+                  Document Folders
                 </h1>
                 <p className="text-blue-100">
-                  Manage and review user documents across your organization
+                  Browse user folders and manage documents by user or sector
                 </p>
               </div>
               <button
@@ -401,12 +394,28 @@ export default function AdminDocuments() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-gray-50">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 p-6 bg-gray-50">
             <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Total
+                    Folders
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    {stats.users}
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center">
+                  <Folder className="w-6 h-6 text-indigo-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Files
                   </p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">
                     {stats.total}
@@ -474,9 +483,7 @@ export default function AdminDocuments() {
             <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
               <Filter className="w-5 h-5 text-blue-600" />
             </div>
-            <h2 className="text-lg font-bold text-gray-900">
-              Filter Documents
-            </h2>
+            <h2 className="text-lg font-bold text-gray-900">Filter Folders</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -484,7 +491,7 @@ export default function AdminDocuments() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by user name or email..."
+                placeholder="Search users..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
@@ -520,7 +527,7 @@ export default function AdminDocuments() {
               onChange={(e) => setTypeFilter(e.target.value)}
               className="px-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
             >
-              <option value="all">All Document Types</option>
+              <option value="all">All Types</option>
               {Object.keys(documentTypeConfig).map((type) => (
                 <option key={type} value={type}>
                   {type}
@@ -562,226 +569,197 @@ export default function AdminDocuments() {
                 onClick={clearFilters}
                 className="ml-auto text-sm text-blue-600 hover:text-blue-700 font-semibold hover:underline"
               >
-                Clear all filters
+                Clear all
               </button>
             </div>
           )}
         </div>
 
-        {/* Documents List */}
-        {filteredUserGroups.length === 0 ? (
+        {/* Folders Grid */}
+        {filteredFolders.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center">
             <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-8 h-8 text-gray-400" />
+              <Folder className="w-8 h-8 text-gray-400" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              No Documents Found
+              No Folders Found
             </h3>
             <p className="text-gray-500">
               {searchQuery ||
               statusFilter !== "all" ||
               typeFilter !== "all" ||
               sectorFilter !== "all"
-                ? "Try adjusting your filters to see more results"
-                : "No documents have been submitted yet"}
+                ? "Try adjusting your filters"
+                : "No user folders available"}
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredUserGroups.map(([userKey, userDocs]) => {
-              const userLabel = userKey.split("|")[1];
-              const userId = parseInt(userKey.split("|")[0]);
-              const user = users.find((u) => u.id === userId);
-              const filteredDocs = getFilteredDocs(userDocs);
-              const isExpanded = expandedUsers[userKey];
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredFolders.map((folder) => {
+              const user = folder.user;
+              const filteredDocs = getFilteredDocs(folder.documents);
+              const isOpen = openFolder === user.id;
+              const activeCount = filteredDocs.filter(
+                (d) => d.status === "Active"
+              ).length;
+              const expiredCount = filteredDocs.filter(
+                (d) => d.status === "Expired"
+              ).length;
 
               return (
-                <div
-                  key={userKey}
-                  className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-center justify-between p-5 hover:bg-gray-50 transition-colors group">
-                    <button
-                      onClick={() => toggleUserExpanded(userKey)}
-                      className="flex items-center gap-4 flex-1"
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                        {userLabel.charAt(0).toUpperCase()}
+                <div key={user.id}>
+                  {/* Folder Card */}
+                  <div
+                    onClick={() => setOpenFolder(isOpen ? null : user.id)}
+                    className="bg-white rounded-2xl shadow-sm border-2 border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all cursor-pointer group overflow-hidden"
+                  >
+                    <div className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          {isOpen ? (
+                            <FolderOpen className="w-8 h-8 text-white" />
+                          ) : (
+                            <Folder className="w-8 h-8 text-white" />
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAddModalForUser(user);
+                          }}
+                          className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
                       </div>
-                      <div className="text-left">
-                        <h2 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                          {userLabel}
-                        </h2>
-                        <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
-                          <span>
-                            {filteredDocs.length} document
-                            {filteredDocs.length !== 1 ? "s" : ""}
+
+                      <h3 className="text-lg font-bold text-gray-900 mb-1 truncate group-hover:text-blue-600 transition-colors">
+                        {user.fullName}
+                      </h3>
+                      <p className="text-sm text-gray-500 mb-1 truncate">
+                        {user.email}
+                      </p>
+                      {user.sector && (
+                        <p className="text-xs text-blue-600 font-medium mb-3">
+                          {user.sector}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                        <div className="flex items-center gap-1 text-sm">
+                          <File className="w-4 h-4 text-gray-400" />
+                          <span className="font-semibold text-gray-900">
+                            {filteredDocs.length}
                           </span>
-                          {user && user.sector && (
-                            <>
-                              <span>•</span>
-                              <span className="text-blue-600">
-                                {user.sector}
-                              </span>
-                            </>
+                          <span className="text-gray-500">files</span>
+                        </div>
+                        <div className="flex gap-1">
+                          {activeCount > 0 && (
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-full">
+                              {activeCount}
+                            </span>
+                          )}
+                          {expiredCount > 0 && (
+                            <span className="px-2 py-0.5 bg-red-50 text-red-700 text-xs font-semibold rounded-full">
+                              {expiredCount}
+                            </span>
                           )}
                         </div>
                       </div>
-                    </button>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => user && openAddModalForUser(user)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                        Add Document
-                      </button>
-                      <div className="hidden sm:flex items-center gap-2">
-                        {filteredDocs.some((d) => d.status === "Active") && (
-                          <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">
-                            {
-                              filteredDocs.filter((d) => d.status === "Active")
-                                .length
-                            }{" "}
-                            Active
-                          </span>
-                        )}
-                        {filteredDocs.some((d) => d.status === "Expired") && (
-                          <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">
-                            {
-                              filteredDocs.filter((d) => d.status === "Expired")
-                                .length
-                            }{" "}
-                            Expired
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => toggleUserExpanded(userKey)}
-                        className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-gray-200 flex items-center justify-center transition-colors"
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-gray-600" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-gray-600" />
-                        )}
-                      </button>
                     </div>
                   </div>
 
-                  {isExpanded && (
-                    <div className="border-t border-gray-100 bg-gray-50 p-5">
-                      <div className="space-y-4">
-                        {filteredDocs.map((doc) => {
-                          const config =
-                            documentTypeConfig[doc.name] ||
-                            documentTypeConfig.Other;
-                          return (
-                            <div
-                              key={doc.id}
-                              className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-all hover:border-gray-300"
-                            >
-                              <div className="flex flex-col lg:flex-row gap-5">
-                                <div
-                                  className={`rounded-xl p-4 ${config.bgColor} self-start`}
-                                >
-                                  <div className={config.textColor}>
-                                    {config.icon}
+                  {/* Folder Contents */}
+                  {isOpen && (
+                    <div className="mt-4 space-y-3 ml-4 border-l-2 border-blue-200 pl-4">
+                      {filteredDocs.map((doc) => {
+                        const config =
+                          documentTypeConfig[doc.name] ||
+                          documentTypeConfig.Other;
+                        return (
+                          <div
+                            key={doc.id}
+                            className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div
+                                className={`rounded-lg p-2 ${config.bgColor}`}
+                              >
+                                <div className={config.textColor}>
+                                  {config.icon}
+                                </div>
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="font-bold text-gray-900 text-sm mb-0.5">
+                                      {doc.name}
+                                    </h4>
+                                    <p className="text-xs text-gray-600 truncate">
+                                      {doc.fullName}
+                                    </p>
                                   </div>
+                                  {getStatusBadge(doc.status)}
                                 </div>
 
-                                <div className="flex-1 min-w-0 w-full space-y-4">
-                                  <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
-                                    <div className="min-w-0 flex-1">
-                                      <h3 className="text-lg font-bold text-gray-900 mb-1">
-                                        {doc.name}
-                                      </h3>
-                                      <p className="text-sm text-gray-600 font-medium">
-                                        {doc.fullName}
-                                      </p>
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        Document #: {doc.documentNumber}
-                                      </p>
-                                    </div>
-                                    {getStatusBadge(doc.status)}
-                                  </div>
+                                <div className="space-y-1 mb-3">
+                                  <p className="text-xs text-gray-500">
+                                    <span className="font-medium">Doc #:</span>{" "}
+                                    {doc.documentNumber}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    <span className="font-medium">Issued:</span>{" "}
+                                    {doc.issueDate}
+                                  </p>
+                                  {doc.expiryDate && (
+                                    <p className="text-xs text-gray-500">
+                                      <span className="font-medium">
+                                        Expires:
+                                      </span>{" "}
+                                      {doc.expiryDate}
+                                    </p>
+                                  )}
+                                </div>
 
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                      <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                                      <div className="min-w-0">
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                          Grants
-                                        </p>
-                                        <p className="text-sm text-gray-700 leading-relaxed">
-                                          {doc.grants}
-                                        </p>
-                                      </div>
-                                    </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <a
+                                    href={`${IMAGE_URL}${doc.fileUrl}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    View
+                                  </a>
 
-                                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                      <Calendar className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                                      <div>
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                          Dates
-                                        </p>
-                                        <p className="text-sm text-gray-700">
-                                          <span className="font-medium">
-                                            Issued:
-                                          </span>{" "}
-                                          {doc.issueDate}
-                                        </p>
-                                        <p className="text-sm text-gray-700">
-                                          <span className="font-medium">
-                                            Expires:
-                                          </span>{" "}
-                                          {doc.expiryDate || "N/A"}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </div>
+                                  <a
+                                    href={`${IMAGE_URL}${doc.fileUrl}`}
+                                    download
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-xs font-semibold transition-all"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    Download
+                                  </a>
 
-                                  <div className="flex flex-wrap gap-2 pt-2">
-                                    <a
-                                      href={doc.fileUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
-                                    >
-                                      <Eye className="w-4 h-4" />
-                                      View Document
-                                    </a>
-
-                                    <a
-                                      href={doc.fileUrl}
-                                      download
-                                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
-                                    >
-                                      <Download className="w-4 h-4" />
-                                      Download
-                                    </a>
-
-                                    <button
-                                      onClick={() =>
-                                        handleDeleteDocument(doc.id)
-                                      }
-                                      disabled={actionLoading === doc.id}
-                                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                      {actionLoading === doc.id ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                      ) : (
-                                        <Trash2 className="w-4 h-4" />
-                                      )}
-                                      Delete
-                                    </button>
-                                  </div>
+                                  <button
+                                    onClick={() => handleDeleteDocument(doc.id)}
+                                    disabled={actionLoading === doc.id}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all disabled:opacity-50"
+                                  >
+                                    {actionLoading === doc.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                    Delete
+                                  </button>
                                 </div>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -793,9 +771,9 @@ export default function AdminDocuments() {
 
       {/* Add Document Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-700 p-6 flex items-center justify-between">
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 p-6 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">
                 {selectedUserForModal
                   ? `Add Document for ${selectedUserForModal.fullName}`
@@ -807,86 +785,76 @@ export default function AdminDocuments() {
                   setSelectedFile(null);
                   setSelectedUserForModal(null);
                 }}
-                className="w-8 h-8 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 flex items-center justify-center transition-colors"
+                className="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
               >
-                <X className="w-5 h-5 text-black" />
+                <X className="w-5 h-5 text-white" />
               </button>
             </div>
 
             <div className="p-6 space-y-5">
               {!selectedUserForModal && (
-                <>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Target
-                    </label>
-                    <select
-                      value={newDocument.targetType}
-                      onChange={(e) =>
-                        setNewDocument({
-                          ...newDocument,
-                          targetType: e.target.value
-                        })
-                      }
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="user">Specific User</option>
-                      <option value="sector">All Users in Sector</option>
-                      <option value="all">All Users</option>
-                    </select>
-                  </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Target Type
+                  </label>
+                  <select
+                    value={newDocument.targetType}
+                    onChange={(e) =>
+                      setNewDocument({
+                        ...newDocument,
+                        targetType: e.target.value
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="user">Specific User</option>
+                    <option value="sector">Entire Sector</option>
+                  </select>
+                </div>
+              )}
 
-                  {newDocument.targetType === "user" && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Select User *
-                      </label>
-                      <select
-                        value={newDocument.userId}
-                        onChange={(e) =>
-                          setNewDocument({
-                            ...newDocument,
-                            userId: e.target.value
-                          })
-                        }
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Choose a user...</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.fullName} ({u.email}){" "}
-                            {u.sector && `- ${u.sector}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+              {!selectedUserForModal && newDocument.targetType === "user" && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Select User *
+                  </label>
+                  <select
+                    value={newDocument.userId}
+                    onChange={(e) =>
+                      setNewDocument({ ...newDocument, userId: e.target.value })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Choose a user...</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.fullName} - {user.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-                  {newDocument.targetType === "sector" && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Select Sector *
-                      </label>
-                      <select
-                        value={newDocument.sector}
-                        onChange={(e) =>
-                          setNewDocument({
-                            ...newDocument,
-                            sector: e.target.value
-                          })
-                        }
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Choose a sector...</option>
-                        {uniqueSectors.map((sector) => (
-                          <option key={sector} value={sector}>
-                            {sector}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </>
+              {!selectedUserForModal && newDocument.targetType === "sector" && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Select Sector *
+                  </label>
+                  <select
+                    value={newDocument.sector}
+                    onChange={(e) =>
+                      setNewDocument({ ...newDocument, sector: e.target.value })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Choose a sector...</option>
+                    {uniqueSectors.map((sector) => (
+                      <option key={sector} value={sector}>
+                        {sector}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
 
               <div>
@@ -910,7 +878,7 @@ export default function AdminDocuments() {
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Full Name *
+                  Full Name / Business Name *
                 </label>
                 <input
                   type="text"
@@ -918,8 +886,23 @@ export default function AdminDocuments() {
                   onChange={(e) =>
                     setNewDocument({ ...newDocument, fullName: e.target.value })
                   }
-                  placeholder="Enter full name on document"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter full name or business name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Grants / Permissions *
+                </label>
+                <textarea
+                  value={newDocument.grants}
+                  onChange={(e) =>
+                    setNewDocument({ ...newDocument, grants: e.target.value })
+                  }
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter what this document grants or permits"
+                  rows={3}
                 />
               </div>
 
@@ -936,27 +919,12 @@ export default function AdminDocuments() {
                       documentNumber: e.target.value
                     })
                   }
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter document number"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Grants *
-                </label>
-                <textarea
-                  value={newDocument.grants}
-                  onChange={(e) =>
-                    setNewDocument({ ...newDocument, grants: e.target.value })
-                  }
-                  placeholder="Enter what this document grants"
-                  rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Issue Date *
@@ -991,25 +959,46 @@ export default function AdminDocuments() {
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Upload Document *
+                  Upload File *
                 </label>
-                <input
-                  type="file"
-                  onChange={(e) => setSelectedFile(e.target.files[0])}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {selectedFile && (
-                  <p className="mt-2 text-sm text-gray-600">
-                    Selected: {selectedFile.name}
-                  </p>
-                )}
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    type="file"
+                    onChange={(e) => setSelectedFile(e.target.files[0])}
+                    className="hidden"
+                    id="file-upload"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className="cursor-pointer flex flex-col items-center"
+                  >
+                    <Upload className="w-10 h-10 text-gray-400 mb-2" />
+                    <span className="text-sm font-medium text-gray-700">
+                      {selectedFile ? selectedFile.name : "Click to upload"}
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      PDF, DOC, DOCX, JPG, PNG (Max 10MB)
+                    </span>
+                  </label>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
                 <button
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setSelectedFile(null);
+                    setSelectedUserForModal(null);
+                  }}
+                  className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
                   onClick={handleAddDocumentForUser}
                   disabled={isSubmitting}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
                     <>
@@ -1022,17 +1011,6 @@ export default function AdminDocuments() {
                       Add Document
                     </>
                   )}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setSelectedFile(null);
-                    setSelectedUserForModal(null);
-                  }}
-                  disabled={isSubmitting}
-                  className="px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
                 </button>
               </div>
             </div>

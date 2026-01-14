@@ -19,7 +19,7 @@ import {
   X,
   UserPlus
 } from "lucide-react";
-import { API_BASE_URL } from "../../config/apiConfig";
+import { API_BASE_URL, IMAGE_URL } from "../../config/apiConfig";
 import toast from "react-hot-toast";
 
 export default function AdminCompliance() {
@@ -765,7 +765,7 @@ export default function AdminCompliance() {
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                      <DollarSign className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                                      {/* <DollarSign className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" /> */}
                                       <div className="min-w-0">
                                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                           Cost
@@ -776,17 +776,79 @@ export default function AdminCompliance() {
                                       </div>
                                     </div>
 
-                                    {item.formData && (
+                                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                      <Activity className="w-5 h-5 text-purple-500 flex-shrink-0 mt-0.5" />
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                          Compliance Status
+                                        </p>
+                                        <p className="text-sm text-gray-700 font-medium">
+                                          {item.complianceStatus || "N/A"}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {item.documentNumber && (
                                       <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
                                         <FileText className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                                        <div>
+                                        <div className="min-w-0">
                                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                            Form Data
+                                            Document Number
+                                          </p>
+                                          <p className="text-sm text-gray-700 font-mono">
+                                            {item.documentNumber}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {item.issueDate && (
+                                      <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                        <Clock className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                            Issue Date
                                           </p>
                                           <p className="text-sm text-gray-700">
-                                            {Object.keys(item.formData).length}{" "}
-                                            fields submitted
+                                            {new Date(
+                                              item.issueDate
+                                            ).toLocaleDateString()}
                                           </p>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {item.expiryDate && (
+                                      <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                        <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                            Expiry Date
+                                          </p>
+                                          <p className="text-sm text-gray-700">
+                                            {new Date(
+                                              item.expiryDate
+                                            ).toLocaleDateString()}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {item.fileUrl && (
+                                      <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                        <FileText className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                            Attached Document
+                                          </p>
+                                          <a
+                                            href={`${IMAGE_URL}${item.fileUrl}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-sm text-blue-600 hover:text-blue-700 font-medium underline"
+                                          >
+                                            View Document
+                                          </a>
                                         </div>
                                       </div>
                                     )}

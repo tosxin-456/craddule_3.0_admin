@@ -5,3 +5,7 @@ const isLocalhost =
 export const API_BASE_URL = isLocalhost
     ? "http://localhost:45365/api"
     : "https://console.craduleapi.com.ng/api";
+
+export const IMAGE_URL = isLocalhost
+    ? "http://localhost:45365"
+    : "https://console.craduleapi.com.ng";

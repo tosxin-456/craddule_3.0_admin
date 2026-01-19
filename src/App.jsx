@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-
+import { Toaster } from "react-hot-toast"; // ✅ import Toaster
 // import SignUpPage from "./pages/signup";
 import LoginPage from "./pages/login";
 // import ForgotPasswordPage from "./pages/forgot-password";
@@ -28,6 +28,14 @@ import AdminCompliance from "./pages/compliance";
 function App() {
   return (
     <div className="font-mont">
+      <Toaster
+        position="top-right"
+        reverseOrder={false}
+        toastOptions={{
+          duration: 4000,
+          style: { fontSize: "14px" }
+        }}
+      />
       <Routes>
         {/* ================= AUTH ROUTES ================= */}
         <Route path="/login" element={<LoginPage />} />

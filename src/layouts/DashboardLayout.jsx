@@ -112,7 +112,7 @@ export default function AdminConsoleLayout() {
             />
             <AdminLink
               to="/admin/compliance"
-              label="Compliance Flags"
+              label="Compliance "
               icon={<Lock className="w-5 h-5" />}
               onNavigate={() => setSidebarOpen(false)}
             />
@@ -127,14 +127,14 @@ export default function AdminConsoleLayout() {
             />
           </NavSection>
 
-          <NavSection label="System">
+          {/* <NavSection label="System">
             <AdminLink
               to="/admin/settings"
               label="Platform Settings"
               icon={<Settings className="w-5 h-5" />}
               onNavigate={() => setSidebarOpen(false)}
             />
-          </NavSection>
+          </NavSection> */}
         </nav>
 
         {/* Footer */}

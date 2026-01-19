@@ -22,6 +22,25 @@ import {
 import { API_BASE_URL, IMAGE_URL } from "../../config/apiConfig";
 import toast from "react-hot-toast";
 
+const BUSINESS_SECTORS = [
+  "Fintech",
+  "Healthtech",
+  "Edtech",
+  "E-commerce",
+  "SaaS",
+  "Logistics",
+  "Agribusiness",
+  "Proptech",
+  "Legaltech",
+  "Insurtech",
+  "Media & Entertainment",
+  "Manufacturing",
+  "Energy & Climate",
+  "Travel & Hospitality",
+  "Retail",
+  "Other"
+];
+
 export default function AdminCompliance() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -231,6 +250,7 @@ export default function AdminCompliance() {
   }
 
   async function handleAddCompliance() {
+    // Validation
     if (
       !newCompliance.title ||
       !newCompliance.description ||
@@ -245,6 +265,7 @@ export default function AdminCompliance() {
       toast.error("Please select a user");
       return;
     }
+
     if (newCompliance.targetType === "sector" && !newCompliance.sector) {
       toast.error("Please select a sector");
       return;
@@ -252,44 +273,44 @@ export default function AdminCompliance() {
 
     try {
       setIsSubmitting(true);
+      const token = localStorage.getItem("token");
 
-      let targetUsers = [];
+      // Prepare payload for backend
+      const payload = {
+        title: newCompliance.title,
+        description: newCompliance.description,
+        cost: Number(newCompliance.cost),
+        expiryDate: newCompliance.expiryDate || null,
+        fullName: null, // optional, we can set it if targetType is "user"
+        sector: "" // will set below
+      };
 
-      if (newCompliance.targetType === "all") {
-        targetUsers = users;
+      if (newCompliance.targetType === "user") {
+        payload.userId = newCompliance.userId;
+        const selectedUser = users.find((u) => u.id === newCompliance.userId);
+        payload.fullName = selectedUser?.fullName || newCompliance.title;
+        payload.sector = "individual"; // backend will recognize single user
       } else if (newCompliance.targetType === "sector") {
-        targetUsers = users.filter((u) => u.sector === newCompliance.sector);
-      } else {
-        targetUsers = users.filter(
-          (u) => u.id === parseInt(newCompliance.userId)
-        );
+        payload.sector = newCompliance.sector.toLowerCase(); // e.g., "finance", "health", or "all"
+      } else if (newCompliance.targetType === "all") {
+        payload.sector = "all"; // assign to all users
       }
 
-      if (targetUsers.length === 0) {
-        toast.error("No users found matching the selected criteria");
-        setIsSubmitting(false);
-        return;
-      }
+      const res = await fetch(`${API_BASE_URL}/admin/compliances`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
 
-      for (const user of targetUsers) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to add compliance");
 
-        const newItem = {
-          id: Date.now() + Math.random(),
-          title: newCompliance.title,
-          description: newCompliance.description,
-          cost: newCompliance.cost,
-          status: newCompliance.status,
-          formData: null,
-          User: { id: user.id, fullName: user.fullName, email: user.email }
-        };
+      toast.success(data.message);
 
-        setItems((prev) => [...prev, newItem]);
-      }
-
-      toast.success(
-        `Compliance item added successfully to ${targetUsers.length} user(s)`
-      );
+      // Reset form and modal
       setShowAddModal(false);
       setSelectedUserForModal(null);
       setNewCompliance({
@@ -301,6 +322,8 @@ export default function AdminCompliance() {
         targetType: "user",
         sector: ""
       });
+
+      fetchCompliance(); // refresh list from backend
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -920,6 +943,7 @@ export default function AdminCompliance() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
             <div className="sticky top-0 bg-gradient-to-r from-red-600 to-orange-700 p-6 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-white mb-1">
@@ -942,6 +966,7 @@ export default function AdminCompliance() {
               </button>
             </div>
 
+            {/* Body */}
             <div className="p-6 space-y-5">
               {!selectedUserForModal && (
                 <div>
@@ -967,6 +992,7 @@ export default function AdminCompliance() {
                 </div>
               )}
 
+              {/* Select User */}
               {!selectedUserForModal && newCompliance.targetType === "user" && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -992,6 +1018,7 @@ export default function AdminCompliance() {
                 </div>
               )}
 
+              {/* Select Sector */}
               {!selectedUserForModal &&
                 newCompliance.targetType === "sector" && (
                   <div>
@@ -1009,8 +1036,9 @@ export default function AdminCompliance() {
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
                     >
                       <option value="">Choose a sector...</option>
-                      {uniqueSectors.map((sector) => (
-                        <option key={sector} value={sector}>
+                      <option value="all">All Sectors</option>
+                      {BUSINESS_SECTORS.map((sector) => (
+                        <option key={sector} value={sector.toLowerCase()}>
                           {sector}
                         </option>
                       ))}
@@ -1018,6 +1046,7 @@ export default function AdminCompliance() {
                   </div>
                 )}
 
+              {/* Title */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Title *
@@ -1036,6 +1065,7 @@ export default function AdminCompliance() {
                 />
               </div>
 
+              {/* Description */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Description *
@@ -1054,6 +1084,7 @@ export default function AdminCompliance() {
                 />
               </div>
 
+              {/* Cost */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Cost (₦) *
@@ -1069,6 +1100,7 @@ export default function AdminCompliance() {
                 />
               </div>
 
+              {/* Status */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Status
@@ -1090,6 +1122,7 @@ export default function AdminCompliance() {
               </div>
             </div>
 
+            {/* Footer */}
             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-6 flex gap-3">
               <button
                 onClick={() => {

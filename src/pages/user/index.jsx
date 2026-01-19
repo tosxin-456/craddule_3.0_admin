@@ -19,10 +19,13 @@ import {
   X
 } from "lucide-react";
 import { API_BASE_URL } from "../../config/apiConfig";
+import UserDetailsModal from "../../components/UserDetails";
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const [selectedUserId, setSelectedUserId] = useState(null);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -378,10 +381,14 @@ export default function AdminUsers() {
 
                     {/* Action Buttons */}
                     <div className="flex gap-2 pt-3 md:pt-4 border-t border-slate-100">
-                      <button className="flex-1 flex items-center justify-center gap-1.5 md:gap-2 py-2 md:py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg md:rounded-xl hover:shadow-lg transition-all hover:scale-105 font-medium text-xs md:text-sm">
+                      <button
+                        onClick={() => setSelectedUserId(user.id)}
+                        className="flex-1 flex items-center justify-center gap-1.5 md:gap-2 py-2 md:py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg md:rounded-xl hover:shadow-lg transition-all hover:scale-105 font-medium text-xs md:text-sm"
+                      >
                         <Eye className="w-3.5 h-3.5 md:w-4 md:h-4" />
                         <span>View</span>
                       </button>
+
                       <button className="flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 md:py-2.5 bg-slate-100 text-slate-700 rounded-lg md:rounded-xl hover:bg-slate-200 transition-all font-medium text-xs md:text-sm">
                         <Ban className="w-3.5 h-3.5 md:w-4 md:h-4" />
                       </button>
@@ -393,6 +400,12 @@ export default function AdminUsers() {
           </div>
         )}
       </div>
+      {selectedUserId && (
+        <UserDetailsModal
+          userId={selectedUserId}
+          onClose={() => setSelectedUserId(null)}
+        />
+      )}
     </div>
   );
 }

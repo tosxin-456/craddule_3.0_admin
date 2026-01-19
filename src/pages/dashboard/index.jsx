@@ -7,6 +7,7 @@ import {
   TrendingUp
 } from "lucide-react";
 import { API_BASE_URL } from "../../config/apiConfig";
+import { useNavigate } from "react-router-dom";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -19,13 +20,7 @@ export default function AdminDashboard() {
   const [recentActivities, setRecentActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const token = localStorage.getItem("token");
-
-  const calculateChange = (current, previous) => {
-    if (previous === 0) return "+100%"; // avoid division by zero
-    const diff = ((current - previous) / previous) * 100;
-    return `${diff > 0 ? "+" : ""}${diff.toFixed(1)}%`;
-  };
-
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchStatsAndActivities() {
@@ -129,22 +124,22 @@ export default function AdminDashboard() {
       label: "Total Users",
       value: stats.totalUsers,
       icon: <Users className="w-6 h-6" />,
-      color: "from-blue-500 to-blue-600",
-    //   change: "+12.5%"
+      color: "from-blue-500 to-blue-600"
+      //   change: "+12.5%"
     },
     {
-      label: "Pending Reviews",
+      label: "Pending  Reviews",
       value: stats.pendingReviews,
       icon: <ShieldAlert className="w-6 h-6" />,
-      color: "from-indigo-500 to-indigo-600",
-    //   change: "+5.2%"
+      color: "from-indigo-500 to-indigo-600"
+      //   change: "+5.2%"
     },
     {
       label: "Flagged Documents",
       value: stats.flaggedDocuments,
       icon: <FileWarning className="w-6 h-6" />,
-      color: "from-cyan-500 to-cyan-600",
-    //   change: "-2.1%"
+      color: "from-cyan-500 to-cyan-600"
+      //   change: "-2.1%"
     }
   ];
 
@@ -273,17 +268,29 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="p-6 space-y-3">
-              <button className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg">
+              <button
+                onClick={() => navigate("/admin/users")}
+                className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg"
+              >
                 Review Users
               </button>
-              <button className="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg">
+              <button
+                onClick={() => navigate("/admin/documents")}
+                className="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg"
+              >
                 Check Documents
               </button>
-              <button className="w-full px-4 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-xl font-semibold hover:from-cyan-600 hover:to-cyan-700 transition-all duration-200 shadow-md hover:shadow-lg">
-                System Logs
+              <button
+                onClick={() => navigate("/admin/compliance")}
+                className="w-full px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-semibold hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg"
+              >
+                Check Compliance
               </button>
-              <button className="w-full px-4 py-3 bg-white border-2 border-blue-200 text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-all duration-200">
-                View Reports
+              <button
+                onClick={() => navigate("/admin/tickets")}
+                className="w-full px-4 py-3 bg-white border-2 border-blue-200 text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-all duration-200"
+              >
+                View Tickets
               </button>
             </div>
           </div>

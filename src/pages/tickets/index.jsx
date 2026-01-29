@@ -17,6 +17,20 @@ import {
 import { API_BASE_URL } from "../../config/apiConfig";
 import toast from "react-hot-toast";
 
+function normalizeStatus(status) {
+  switch (status?.toLowerCase()) {
+    case "open":
+      return "Open";
+    case "in_progress":
+    case "under review":
+      return "Under Review";
+    case "resolved":
+      return "Resolved";
+    default:
+      return "Open"; // fallback
+  }
+}
+
 export default function AdminTickets() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +38,7 @@ export default function AdminTickets() {
   const [reply, setReply] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [ticketType, setTicketType] = useState("user");
 
   const token = localStorage.getItem("token");
 
@@ -36,8 +51,30 @@ export default function AdminTickets() {
       const res = await fetch(`${API_BASE_URL}/admin/tickets`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      const data = await res.json();
-      setTickets(data);
+
+      const result = await res.json();
+      console.log(result);
+      // Normalize both ticket types into ONE array
+      const userTickets = (result.data?.userTickets || []).map((t) => ({
+        ...t,
+        isPublic: false,
+        status: normalizeStatus(t.status)
+      }));
+
+      const publicTickets = (result.data?.publicTickets || []).map((t) => ({
+        ...t,
+        isPublic: true,
+        title: t.subject,
+        description: t.message,
+        submittedAt: t.createdAt,
+        status: normalizeStatus(t.status),
+        User: {
+          fullName: t.name,
+          email: t.email
+        }
+      }));
+
+      setTickets([...userTickets, ...publicTickets]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -45,9 +82,14 @@ export default function AdminTickets() {
     }
   }
 
-  async function updateStatus(id, status) {
+  async function updateStatus(id, status, isSupportTicket = false) {
     try {
-      await fetch(`${API_BASE_URL}/admin/tickets/${id}/status`, {
+      // Choose the correct route based on ticket type
+      const route = isSupportTicket
+        ? `${API_BASE_URL}/admin/tickets-support/${id}/status`
+        : `${API_BASE_URL}/admin/tickets/${id}/status`;
+
+      await fetch(route, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -55,6 +97,7 @@ export default function AdminTickets() {
         },
         body: JSON.stringify({ status })
       });
+
       fetchTickets();
     } catch (err) {
       toast.error("Failed to update status");
@@ -62,43 +105,61 @@ export default function AdminTickets() {
   }
 
   async function sendReply() {
-    if (!reply.trim()) return;
+    if (!reply.trim() || !selectedTicket) return;
 
     try {
-      await fetch(`${API_BASE_URL}/admin/tickets/${selectedTicket.id}/reply`, {
+      // Decide route based on ticket type
+      const route = selectedTicket.isPublic
+        ? "tickets-support" // public/support tickets route
+        : "tickets"; // normal tickets route
+
+      await fetch(`${API_BASE_URL}/admin/${route}/${selectedTicket.id}/reply`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ adminReply: reply })
+        body: JSON.stringify({
+          adminReply: reply,
+          senderType: "ADMIN" // backend expects this
+        })
       });
 
+      toast.success("Reply sent successfully!");
       setReply("");
       setSelectedTicket(null);
-      fetchTickets();
+      fetchTickets(); // refresh list
     } catch (err) {
+      console.error(err);
       toast.error("Failed to send reply");
     }
   }
 
   const filteredTickets = tickets.filter((ticket) => {
+    const matchesType =
+      ticketType === "user" ? !ticket.isPublic : ticket.isPublic;
+
     const matchesSearch =
       ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ticket.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ticket.User?.fullName.toLowerCase().includes(searchQuery.toLowerCase());
+      ticket.User?.fullName?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesFilter =
       filterStatus === "All" || ticket.status === filterStatus;
 
-    return matchesSearch && matchesFilter;
+    return matchesType && matchesSearch && matchesFilter;
   });
 
+  const scopedTickets = tickets.filter((t) =>
+    ticketType === "user" ? !t.isPublic : t.isPublic
+  );
+
   const stats = {
-    total: tickets.length,
-    open: tickets.filter((t) => t.status === "Open").length,
-    underReview: tickets.filter((t) => t.status === "Under Review").length,
-    resolved: tickets.filter((t) => t.status === "Resolved").length
+    total: scopedTickets.length,
+    open: scopedTickets.filter((t) => t.status === "Open").length,
+    underReview: scopedTickets.filter((t) => t.status === "Under Review")
+      .length,
+    resolved: scopedTickets.filter((t) => t.status === "Resolved").length
   };
 
   const statusConfig = {
@@ -150,6 +211,30 @@ export default function AdminTickets() {
             </p>
           </div>
         </div>
+      </div>
+      {/* Ticket Type Tabs */}
+      <div className="flex gap-2 bg-white border border-slate-200 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setTicketType("user")}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+            ticketType === "user"
+              ? "bg-indigo-600 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          User Tickets
+        </button>
+
+        <button
+          onClick={() => setTicketType("public")}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+            ticketType === "public"
+              ? "bg-indigo-600 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          Public Tickets
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -271,7 +356,10 @@ export default function AdminTickets() {
               year: "numeric"
             }
           );
-          const StatusIcon = statusConfig[ticket.status].icon;
+
+          const status = ticket.status || "Open"; // fallback
+          const statusStyle = statusConfig[status] || statusConfig["Open"];
+          const StatusIcon = statusStyle.icon; // now safe
 
           return (
             <div
@@ -297,12 +385,12 @@ export default function AdminTickets() {
                       <span className="flex items-center gap-1.5">
                         <User className="w-4 h-4" />
                         <span className="font-medium text-slate-700">
-                          {ticket.User?.fullName}
+                          {ticket.User?.fullName || "N/A"}
                         </span>
                       </span>
                       <span className="flex items-center gap-1.5">
                         <Mail className="w-4 h-4" />
-                        {ticket.User?.email}
+                        {ticket.User?.email || "N/A"}
                       </span>
                       <span className="flex items-center gap-1.5">
                         <Clock className="w-4 h-4" />
@@ -328,20 +416,18 @@ export default function AdminTickets() {
                   {/* Right Actions */}
                   <div className="flex flex-col items-end gap-3">
                     <span
-                      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border ${
-                        statusConfig[ticket.status].bg
-                      } ${statusConfig[ticket.status].text} ${
-                        statusConfig[ticket.status].border
-                      }`}
+                      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border ${statusStyle.bg} ${statusStyle.text} ${statusStyle.border}`}
                     >
                       <StatusIcon className="w-3.5 h-3.5" />
-                      {ticket.status}
+                      {status}
                     </span>
 
                     <div className="flex gap-2">
-                      {ticket.status !== "Resolved" && (
+                      {status !== "Resolved" && (
                         <button
-                          onClick={() => updateStatus(ticket.id, "Resolved")}
+                          onClick={() =>
+                            updateStatus(ticket.id, "Resolved", true)
+                          }
                           className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
                         >
                           <CheckCircle2 className="w-4 h-4" />

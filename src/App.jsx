@@ -12,6 +12,9 @@ import AdminSettings from "./pages/settings";
 import AdminOnboarding from "./pages/onboarding reviews";
 import AdminActivity from "./pages/activity";
 import AdminCompliance from "./pages/compliance";
+import AdminCacApplications from "./pages/cac applications";
+import AdminFirsApplications from "./pages/firs applications";
+import AdminSculmApplications from "./pages/sculm applications";
 // import DashboardHome from "./pages/Dashboard";
 // import FounderProfile from "./pages/founder profile";
 // import FounderSettings from "./pages/settings";
@@ -55,6 +58,9 @@ function App() {
 
           <Route path="tickets" element={<AdminTickets />} />
           <Route path="settings" element={<AdminSettings />} />
+          <Route path="cac" element={<AdminCacApplications />} />
+          <Route path="firs" element={<AdminFirsApplications />} />
+          <Route path="sculm" element={<AdminSculmApplications />} />
         </Route>
 
         {/* ================= FALLBACK ================= */}

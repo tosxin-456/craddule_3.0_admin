@@ -274,18 +274,43 @@ export default function AdminDashboard() {
               >
                 Review Users
               </button>
+
               <button
                 onClick={() => navigate("/admin/documents")}
                 className="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl font-semibold hover:from-indigo-600 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg"
               >
                 Check Documents
               </button>
+
               <button
                 onClick={() => navigate("/admin/compliance")}
                 className="w-full px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-semibold hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg"
               >
                 Check Compliance
               </button>
+
+              {/* === NEW LINKS YOU ASKED FOR === */}
+              <button
+                onClick={() => navigate("/admin/cac")}
+                className="w-full px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg"
+              >
+                View CAC Applications
+              </button>
+
+              <button
+                onClick={() => navigate("/admin/firs")}
+                className="w-full px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-amber-700 transition-all duration-200 shadow-md hover:shadow-lg"
+              >
+                View FIRS Applications
+              </button>
+
+              <button
+                onClick={() => navigate("/admin/sculm")}
+                className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl font-semibold hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg"
+              >
+                View SCUML Applications
+              </button>
+
               <button
                 onClick={() => navigate("/admin/tickets")}
                 className="w-full px-4 py-3 bg-white border-2 border-blue-200 text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-all duration-200"

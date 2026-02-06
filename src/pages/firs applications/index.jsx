@@ -50,6 +50,12 @@ export default function AdminFirsApplications() {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
 
+  // Price modal states
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [priceValue, setPriceValue] = useState("");
+  const [settingPrice, setSettingPrice] = useState(false);
+  const [pendingApprovalApp, setPendingApprovalApp] = useState(null);
+
   const token = localStorage.getItem("token");
 
   useEffect(() => {
@@ -79,7 +85,8 @@ export default function AdminFirsApplications() {
   }, [page, token]);
 
   const downloadDocument = (docPath) => {
-    if (!docPath) return toast.error("No document available");
+    if (!docPath || docPath === "null")
+      return toast.error("No document available");
 
     const url = `${API_BASE_URL}${docPath}`;
     const a = document.createElement("a");
@@ -89,7 +96,8 @@ export default function AdminFirsApplications() {
   };
 
   const openImageModal = (imagePath) => {
-    if (!imagePath) return toast.error("No image available");
+    if (!imagePath || imagePath === "null")
+      return toast.error("No image available");
     setSelectedImage(`${API_BASE_URL}${imagePath}`);
     setImageModalOpen(true);
   };
@@ -105,8 +113,19 @@ export default function AdminFirsApplications() {
     setFeedbackUpdate(app.adminFeedback || "");
   };
 
+  const parseJSON = (value) => {
+    try {
+      if (!value || value === "null") return null;
+      const parsed = JSON.parse(value);
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
   const parseArray = (value) => {
     try {
+      if (!value || value === "null") return null;
       const parsed = JSON.parse(value);
       return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
     } catch {
@@ -116,7 +135,76 @@ export default function AdminFirsApplications() {
 
   const closeModal = () => setSelectedApp(null);
 
+  const openPriceModal = (app) => {
+    setPendingApprovalApp(app);
+    setPriceValue(app.price || "");
+    setShowPriceModal(true);
+  };
+
+  const closePriceModal = () => {
+    setShowPriceModal(false);
+    setPriceValue("");
+    setPendingApprovalApp(null);
+  };
+
+  const submitPrice = async () => {
+    if (!priceValue || isNaN(priceValue) || Number(priceValue) <= 0) {
+      return toast.error("Please enter a valid price");
+    }
+
+    setSettingPrice(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/admin/firs-applications/${pendingApprovalApp.id}/update`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            status: "approved",
+            adminFeedback: feedbackUpdate,
+            price: Number(priceValue)
+          })
+        }
+      );
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Application approved with price successfully");
+        setApplications((prev) =>
+          prev.map((app) =>
+            app.id === pendingApprovalApp.id
+              ? {
+                  ...app,
+                  status: "approved",
+                  adminFeedback: feedbackUpdate,
+                  price: Number(priceValue)
+                }
+              : app
+          )
+        );
+        closePriceModal();
+        closeModal();
+      } else {
+        toast.error(data.message || "Failed to approve application");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to approve application");
+    } finally {
+      setSettingPrice(false);
+    }
+  };
+
   const updateApplication = async () => {
+    // If status is being changed to approved, show price modal
+    if (statusUpdate === "approved" && selectedApp.status !== "approved") {
+      openPriceModal(selectedApp);
+      return;
+    }
+
+    // For non-approval updates, proceed normally
     setUpdating(true);
     try {
       const res = await fetch(
@@ -198,11 +286,9 @@ export default function AdminFirsApplications() {
   };
 
   const filteredApplications = applications.filter((app) => {
-    const matchesSearch =
-      (app.firstName + " " + app.lastName)
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      (app.businessName || "").toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (app.taxpayerName || "")
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === "all" || app.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
@@ -311,7 +397,7 @@ export default function AdminFirsApplications() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
               <input
                 type="text"
-                placeholder="Search by applicant name or business name..."
+                placeholder="Search by taxpayer name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400 outline-none transition-all bg-slate-50 focus:bg-white"
@@ -357,12 +443,6 @@ export default function AdminFirsApplications() {
             {filteredApplications.map((app) => {
               const statusConfig = getStatusConfig(app.status);
               const StatusIcon = statusConfig.icon;
-              const displayName =
-                app.businessName ||
-                `${app.firstName || ""} ${app.middleName || ""} ${
-                  app.lastName || ""
-                }`.trim() ||
-                "Unnamed Applicant";
 
               return (
                 <div
@@ -381,21 +461,16 @@ export default function AdminFirsApplications() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
                           <div className="p-2.5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl group-hover:from-blue-100 group-hover:to-indigo-100 transition-colors shadow-sm">
-                            <User className="w-5 h-5 text-blue-600" />
+                            <Building2 className="w-5 h-5 text-blue-600" />
                           </div>
                           <h3 className="font-bold text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors text-lg">
-                            {displayName}
+                            {app.taxpayerName || "Unnamed Taxpayer"}
                           </h3>
                         </div>
-                        {app.registrationType && (
+                        {app.taxOffice && (
                           <p className="text-sm text-slate-500 font-medium ml-12 flex items-center gap-1">
                             <BriefcaseIcon className="w-3.5 h-3.5" />
-                            {app.registrationType}
-                          </p>
-                        )}
-                        {app.taxPayerType && (
-                          <p className="text-xs text-slate-400 font-medium ml-12 mt-1">
-                            {app.taxPayerType}
+                            {app.taxOffice}
                           </p>
                         )}
                       </div>
@@ -412,49 +487,77 @@ export default function AdminFirsApplications() {
                         <StatusIcon className="w-4 h-4" />
                         {statusConfig.label}
                       </div>
+                      {app.isPaid && (
+                        <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border bg-green-50 border-green-200 text-green-700 text-sm font-semibold shadow-sm ml-2">
+                          <CheckCircle2 className="w-4 h-4" />
+                          Paid
+                        </div>
+                      )}
+                      {!app.isPaid && app.status === "approved" && (
+                        <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border bg-orange-50 border-orange-200 text-orange-700 text-sm font-semibold shadow-sm ml-2">
+                          <Clock className="w-4 h-4" />
+                          Pending Payment
+                        </div>
+                      )}
                     </div>
 
                     {/* Quick Info */}
                     <div className="space-y-3 mb-5">
-                      {app.businessEmail && (
+                      {app.rcNumber && (
                         <div className="flex items-center gap-2.5 text-sm group/item">
                           <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
                             <Hash className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
                           </div>
                           <span className="text-slate-500 font-medium min-w-[60px]">
-                            Email:
+                            RC Number:
                           </span>
                           <span className="text-slate-800 font-semibold truncate">
-                            {app.businessEmail}
+                            {app.rcNumber}
                           </span>
                         </div>
                       )}
-                      {app.businessPhone && (
+                      {app.natureOfBusiness && (
                         <div className="flex items-center gap-2.5 text-sm group/item">
                           <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
-                            <Calendar className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
+                            <Briefcase className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
                           </div>
                           <span className="text-slate-500 font-medium">
-                            Phone:
-                          </span>
-                          <span className="text-slate-800 font-semibold">
-                            {app.businessPhone}
-                          </span>
-                        </div>
-                      )}
-                      {app.residentialAddress && (
-                        <div className="flex items-center gap-2.5 text-sm group/item">
-                          <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
-                            <MapPin className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
-                          </div>
-                          <span className="text-slate-500 font-medium">
-                            Address:
+                            Business:
                           </span>
                           <span className="text-slate-800 font-semibold truncate">
-                            {app.residentialAddress}
+                            {app.natureOfBusiness}
                           </span>
                         </div>
                       )}
+                      {app.registeredOfficeAddress &&
+                        app.registeredOfficeAddress !== "null" && (
+                          <div className="flex items-center gap-2.5 text-sm group/item">
+                            <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
+                              <MapPin className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
+                            </div>
+                            <span className="text-slate-500 font-medium">
+                              Address:
+                            </span>
+                            <span className="text-slate-800 font-semibold truncate">
+                              {app.registeredOfficeAddress}
+                            </span>
+                          </div>
+                        )}
+                      {app.price &&
+                        app.status === "approved" &&
+                        Number(app.price) > 0 && (
+                          <div className="flex items-center gap-2.5 text-sm group/item">
+                            <div className="p-1.5 bg-emerald-100 rounded-lg group-hover/item:bg-emerald-200 transition-colors">
+                              <DollarSign className="w-3.5 h-3.5 text-emerald-600 group-hover/item:text-emerald-700 transition-colors" />
+                            </div>
+                            <span className="text-slate-500 font-medium">
+                              Price:
+                            </span>
+                            <span className="text-emerald-700 font-bold">
+                              ₦{Number(app.price).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                     </div>
 
                     {/* View Details Button */}
@@ -495,7 +598,119 @@ export default function AdminFirsApplications() {
           </div>
         )}
 
-        {/* MODAL */}
+        {/* PRICE MODAL */}
+        {showPriceModal && pendingApprovalApp && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-center z-[70] p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl relative animate-in slide-in-from-bottom-8 duration-300">
+              {/* Price Modal Header */}
+              <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white p-6 rounded-t-3xl">
+                <button
+                  onClick={closePriceModal}
+                  className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-xl transition-all group"
+                >
+                  <X className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
+                    <DollarSign className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold">
+                      Set Application Price
+                    </h3>
+                    <p className="text-emerald-100 text-sm mt-1">
+                      {pendingApprovalApp.taxpayerName || "Taxpayer"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price Modal Content */}
+              <div className="p-6 space-y-5">
+                <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-emerald-100 rounded-lg">
+                      <Info className="w-5 h-5 text-emerald-700" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Approval Confirmation
+                      </p>
+                      <p className="text-xs text-emerald-700 mt-1">
+                        Please set the price for this FIRS TIN application
+                        before approving it.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2.5 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4" />
+                    Application Price (₦)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">
+                      ₦
+                    </span>
+                    <input
+                      type="number"
+                      value={priceValue}
+                      onChange={(e) => setPriceValue(e.target.value)}
+                      placeholder="Enter amount"
+                      min="0"
+                      step="1"
+                      className="w-full pl-10 pr-4 py-4 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-400 outline-none transition-all text-lg font-semibold text-slate-800 placeholder:text-slate-400 placeholder:font-normal"
+                    />
+                  </div>
+                  {priceValue &&
+                    !isNaN(priceValue) &&
+                    Number(priceValue) > 0 && (
+                      <p className="mt-2 text-sm text-slate-600 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span className="font-semibold">
+                          ₦{Number(priceValue).toLocaleString()}
+                        </span>
+                      </p>
+                    )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={closePriceModal}
+                    className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all border-2 border-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitPrice}
+                    disabled={
+                      settingPrice ||
+                      !priceValue ||
+                      isNaN(priceValue) ||
+                      Number(priceValue) <= 0
+                    }
+                    className="flex-1 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-400 text-white font-bold rounded-xl shadow-lg hover:shadow-xl disabled:shadow-none transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed"
+                  >
+                    {settingPrice ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Approving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-5 h-5" />
+                        Approve & Set Price
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MAIN APPLICATION MODAL */}
         {selectedApp && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-start pt-8 sm:pt-12 z-50 p-4 overflow-y-auto animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl relative my-8 animate-in slide-in-from-bottom-8 duration-300">
@@ -513,24 +728,28 @@ export default function AdminFirsApplications() {
                   </div>
                   <div className="flex-1">
                     <h2 className="text-3xl font-bold mb-2">
-                      {selectedApp.businessName ||
-                        `${selectedApp.firstName || ""} ${
-                          selectedApp.middleName || ""
-                        } ${selectedApp.lastName || ""}`.trim() ||
-                        "Applicant Details"}
+                      {selectedApp.taxpayerName || "Tax Application"}
                     </h2>
                     <div className="flex flex-wrap gap-3 items-center">
-                      {selectedApp.registrationType && (
+                      {selectedApp.taxOffice && (
                         <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-semibold">
-                          {selectedApp.registrationType}
+                          {selectedApp.taxOffice}
                         </span>
                       )}
-                      {selectedApp.taxPayerType && (
+                      {selectedApp.rcNumber && (
                         <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-semibold flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5" />
-                          {selectedApp.taxPayerType}
+                          <Hash className="w-3.5 h-3.5" />
+                          RC: {selectedApp.rcNumber}
                         </span>
                       )}
+                      {selectedApp.price &&
+                        selectedApp.status === "approved" &&
+                        Number(selectedApp.price) > 0 && (
+                          <span className="px-3 py-1.5 bg-emerald-500/30 backdrop-blur-sm rounded-lg text-sm font-bold flex items-center gap-1.5">
+                            <DollarSign className="w-3.5 h-3.5" />₦
+                            {Number(selectedApp.price).toLocaleString()}
+                          </span>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -538,348 +757,298 @@ export default function AdminFirsApplications() {
 
               {/* Modal Content */}
               <div className="p-8 space-y-6 max-h-[calc(90vh-240px)] overflow-y-auto">
-                {/* Personal Information */}
+                {/* Company Information */}
                 <Section
-                  title="Personal Information"
-                  icon={User}
+                  title="Company Information"
+                  icon={Building2}
                   gradient="from-blue-500 to-indigo-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <InfoItem
                       icon={User}
-                      label="First Name"
-                      value={selectedApp.firstName}
+                      label="Taxpayer Name"
+                      value={selectedApp.taxpayerName}
                     />
                     <InfoItem
-                      icon={User}
-                      label="Middle Name"
-                      value={selectedApp.middleName}
+                      icon={Briefcase}
+                      label="Nature of Business"
+                      value={selectedApp.natureOfBusiness}
                     />
                     <InfoItem
-                      icon={User}
-                      label="Last Name"
-                      value={selectedApp.lastName}
+                      icon={Hash}
+                      label="RC Number"
+                      value={selectedApp.rcNumber}
+                    />
+                    <InfoItem
+                      icon={Hash}
+                      label="CAC ID"
+                      value={selectedApp.cacId}
                     />
                     <InfoItem
                       icon={Calendar}
-                      label="Date of Birth"
-                      value={selectedApp.dateOfBirth}
+                      label="Date of Incorporation"
+                      value={
+                        selectedApp.dateOfIncorporation
+                          ? new Date(
+                              selectedApp.dateOfIncorporation
+                            ).toLocaleDateString()
+                          : null
+                      }
                     />
                     <InfoItem
-                      icon={User}
-                      label="Gender"
-                      value={selectedApp.gender}
+                      icon={Calendar}
+                      label="Commencement Date"
+                      value={
+                        selectedApp.commencementDate
+                          ? new Date(
+                              selectedApp.commencementDate
+                            ).toLocaleDateString()
+                          : null
+                      }
                     />
                     <InfoItem
-                      icon={MapPin}
-                      label="Nationality"
-                      value={selectedApp.nationality}
+                      icon={Calendar}
+                      label="Accounting Year End"
+                      value={
+                        selectedApp.accountingYearEnd
+                          ? new Date(
+                              selectedApp.accountingYearEnd
+                            ).toLocaleDateString()
+                          : null
+                      }
                     />
-                    <InfoItem icon={Hash} label="NIN" value={selectedApp.nin} />
-                    <InfoItem icon={Hash} label="BVN" value={selectedApp.bvn} />
                     <InfoItem
                       icon={Home}
-                      label="Residential Address"
-                      value={selectedApp.residentialAddress}
+                      label="Registered Office Address"
+                      value={
+                        selectedApp.registeredOfficeAddress !== "null"
+                          ? selectedApp.registeredOfficeAddress
+                          : null
+                      }
+                      fullWidth
+                    />
+                    <InfoItem
+                      icon={Home}
+                      label="Business Address"
+                      value={
+                        selectedApp.businessAddress !== "null"
+                          ? selectedApp.businessAddress
+                          : null
+                      }
                       fullWidth
                     />
                   </div>
                 </Section>
 
-                {/* Business Information */}
-                {(selectedApp.businessName ||
-                  selectedApp.businessAddress ||
-                  selectedApp.businessEmail) && (
-                  <Section
-                    title="Business Information"
-                    icon={Building2}
-                    gradient="from-purple-500 to-pink-500"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                      <InfoItem
-                        icon={Briefcase}
-                        label="Business Name"
-                        value={selectedApp.businessName}
-                      />
-                      <InfoItem
-                        icon={FileText}
-                        label="Nature of Business"
-                        value={selectedApp.natureOfBusiness}
-                      />
-                      <InfoItem
-                        icon={Calendar}
-                        label="Date of Incorporation"
-                        value={selectedApp.dateOfIncorporation}
-                      />
-                      <InfoItem
-                        icon={Hash}
-                        label="RC Number"
-                        value={selectedApp.rcNumber}
-                      />
-                      <InfoItem
-                        icon={Hash}
-                        label="CAC ID"
-                        value={selectedApp.cacId}
-                      />
-                      <InfoItem
-                        icon={DollarSign}
-                        label="Annual Turnover"
-                        value={selectedApp.annualTurnover}
-                      />
-                      <InfoItem
-                        icon={Users}
-                        label="Number of Employees"
-                        value={selectedApp.numberOfEmployees}
-                      />
-                      <InfoItem
-                        icon={FileText}
-                        label="Business Email"
-                        value={selectedApp.businessEmail}
-                      />
-                      <InfoItem
-                        icon={FileText}
-                        label="Business Phone"
-                        value={selectedApp.businessPhone}
-                      />
-                      <InfoItem
-                        icon={Home}
-                        label="Business Address"
-                        value={selectedApp.businessAddress}
-                        fullWidth
-                      />
-                    </div>
-                  </Section>
-                )}
-
                 {/* Tax Information */}
                 <Section
                   title="Tax Information"
                   icon={Receipt}
-                  gradient="from-teal-500 to-cyan-500"
+                  gradient="from-purple-500 to-pink-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <InfoItem
+                      icon={Building2}
+                      label="Tax Office"
+                      value={selectedApp.taxOffice}
+                    />
+                    <InfoItem
                       icon={Hash}
                       label="Previous TIN"
-                      value={selectedApp.previousTin}
+                      value={
+                        selectedApp.previousTin !== "null"
+                          ? selectedApp.previousTin
+                          : null
+                      }
                     />
                     <InfoItem
-                      icon={Building2}
-                      label="Existing Tax Office"
-                      value={selectedApp.existingTaxOffice}
-                    />
-                    <InfoItem
-                      icon={CheckCircle2}
-                      label="Registered for VAT"
-                      value={selectedApp.registeredForVAT ? "Yes" : "No"}
-                    />
-                    <InfoItem
-                      icon={Hash}
-                      label="VAT Number"
-                      value={selectedApp.vatNumber}
+                      icon={DollarSign}
+                      label="Source of Income"
+                      value={selectedApp.sourceOfIncome}
                     />
                     <InfoItem
                       icon={CheckCircle2}
-                      label="Registered for WHT"
-                      value={selectedApp.registeredForWHT ? "Yes" : "No"}
+                      label="VAT Liability"
+                      value={selectedApp.vatLiability}
                     />
                   </div>
                 </Section>
 
-                {/* Employment Information */}
-                {(selectedApp.employerName ||
-                  selectedApp.employmentStatus ||
-                  selectedApp.monthlyIncome) && (
+                {/* Banking & Professional Services */}
+                <Section
+                  title="Banking & Professional Services"
+                  icon={CreditCard}
+                  gradient="from-teal-500 to-cyan-500"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <InfoItem
+                      icon={Building2}
+                      label="Bankers"
+                      value={
+                        selectedApp.bankers !== "null"
+                          ? selectedApp.bankers
+                          : null
+                      }
+                    />
+                    <InfoItem
+                      icon={Users}
+                      label="Auditors/Tax Consultants"
+                      value={
+                        selectedApp.auditorsOrTaxConsultants !== "null"
+                          ? selectedApp.auditorsOrTaxConsultants
+                          : null
+                      }
+                    />
+                  </div>
+                </Section>
+
+                {/* Principal Officers */}
+                {parseJSON(selectedApp.principalOfficers) && (
                   <Section
-                    title="Employment Information"
-                    icon={Briefcase}
+                    title="Principal Officers"
+                    icon={Users}
+                    gradient="from-indigo-500 to-purple-500"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      {(() => {
+                        const officers = parseJSON(
+                          selectedApp.principalOfficers
+                        );
+                        return (
+                          <>
+                            {officers?.chairman && (
+                              <div className="bg-white rounded-xl p-4 border border-slate-200">
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                  Chairman
+                                </p>
+                                <p className="text-sm text-slate-800 font-semibold">
+                                  {officers.chairman.name || "Not provided"}
+                                </p>
+                                {officers.chairman.contact && (
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    {officers.chairman.contact}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {officers?.managingDirector && (
+                              <div className="bg-white rounded-xl p-4 border border-slate-200">
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                  Managing Director
+                                </p>
+                                <p className="text-sm text-slate-800 font-semibold">
+                                  {officers.managingDirector.name ||
+                                    "Not provided"}
+                                </p>
+                                {officers.managingDirector.contact && (
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    {officers.managingDirector.contact}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {officers?.companySecretary && (
+                              <div className="bg-white rounded-xl p-4 border border-slate-200">
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                  Company Secretary
+                                </p>
+                                <p className="text-sm text-slate-800 font-semibold">
+                                  {officers.companySecretary.name ||
+                                    "Not provided"}
+                                </p>
+                                {officers.companySecretary.contact && (
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    {officers.companySecretary.contact}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </Section>
+                )}
+
+                {/* Shareholders */}
+                {parseArray(selectedApp.shareholders) && (
+                  <Section
+                    title="Shareholders"
+                    icon={Users}
                     gradient="from-orange-500 to-red-500"
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                      <InfoItem
-                        icon={Briefcase}
-                        label="Employment Status"
-                        value={selectedApp.employmentStatus}
-                      />
-                      <InfoItem
-                        icon={Building2}
-                        label="Employer Name"
-                        value={selectedApp.employerName}
-                      />
-                      <InfoItem
-                        icon={DollarSign}
-                        label="Monthly Income"
-                        value={selectedApp.monthlyIncome}
-                      />
-                      <InfoItem
-                        icon={Home}
-                        label="Employer Address"
-                        value={selectedApp.employerAddress}
-                        fullWidth
-                      />
-                    </div>
+                    <ArrayInfoItem
+                      label="Shareholders"
+                      value={parseArray(selectedApp.shareholders)}
+                    />
                   </Section>
                 )}
 
-                {/* Contact Person Information */}
-                {(selectedApp.contactPersonName ||
-                  selectedApp.contactPersonEmail ||
-                  selectedApp.contactPersonPhone) && (
-                  <Section
-                    title="Contact Person"
-                    icon={User}
-                    gradient="from-pink-500 to-rose-500"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                      <InfoItem
-                        icon={User}
-                        label="Name"
-                        value={selectedApp.contactPersonName}
-                      />
-                      <InfoItem
-                        icon={Briefcase}
-                        label="Designation"
-                        value={selectedApp.contactPersonDesignation}
-                      />
-                      <InfoItem
-                        icon={FileText}
-                        label="Email"
-                        value={selectedApp.contactPersonEmail}
-                      />
-                      <InfoItem
-                        icon={FileText}
-                        label="Phone"
-                        value={selectedApp.contactPersonPhone}
-                      />
-                    </div>
-                  </Section>
-                )}
-
-                {/* Banking Information */}
-                {(selectedApp.bankName ||
-                  selectedApp.accountNumber ||
-                  selectedApp.accountName) && (
-                  <Section
-                    title="Banking Information"
-                    icon={CreditCard}
-                    gradient="from-indigo-500 to-blue-500"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                      <InfoItem
-                        icon={Building2}
-                        label="Bank Name"
-                        value={selectedApp.bankName}
-                      />
-                      <InfoItem
-                        icon={Hash}
-                        label="Account Number"
-                        value={selectedApp.accountNumber}
-                      />
-                      <InfoItem
-                        icon={User}
-                        label="Account Name"
-                        value={selectedApp.accountName}
-                      />
-                    </div>
-                  </Section>
-                )}
-
-                {/* People Information */}
-                {(parseArray(selectedApp.directors) ||
-                  parseArray(selectedApp.partners)) && (
-                  <Section
-                    title="Company Officials"
-                    icon={Users}
-                    gradient="from-violet-500 to-purple-500"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <ArrayInfoItem
-                        label="Directors"
-                        value={parseArray(selectedApp.directors)}
-                      />
-                      <ArrayInfoItem
-                        label="Partners"
-                        value={parseArray(selectedApp.partners)}
-                      />
-                    </div>
-                  </Section>
-                )}
-
-                {/* Documents with Image Preview */}
+                {/* Documents */}
                 <Section
                   title="Uploaded Documents"
                   icon={File}
                   gradient="from-amber-500 to-yellow-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {selectedApp.validID && (
-                      <ImageDocumentCard
-                        label="Valid ID"
-                        imagePath={selectedApp.validID}
-                        onView={() => openImageModal(selectedApp.validID)}
-                        onDownload={() => downloadDocument(selectedApp.validID)}
-                      />
-                    )}
-                    {selectedApp.utilityBill && (
-                      <ImageDocumentCard
-                        label="Utility Bill"
-                        imagePath={selectedApp.utilityBill}
-                        onView={() => openImageModal(selectedApp.utilityBill)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.utilityBill)
-                        }
-                      />
-                    )}
-                    {selectedApp.passportPhoto && (
-                      <ImageDocumentCard
-                        label="Passport Photo"
-                        imagePath={selectedApp.passportPhoto}
-                        onView={() => openImageModal(selectedApp.passportPhoto)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.passportPhoto)
-                        }
-                      />
-                    )}
-                    {selectedApp.cacCertificate && (
-                      <ImageDocumentCard
-                        label="CAC Certificate"
-                        imagePath={selectedApp.cacCertificate}
-                        onView={() =>
-                          openImageModal(selectedApp.cacCertificate)
-                        }
-                        onDownload={() =>
-                          downloadDocument(selectedApp.cacCertificate)
-                        }
-                      />
-                    )}
-                    {selectedApp.businessPermit && (
-                      <ImageDocumentCard
-                        label="Business Permit"
-                        imagePath={selectedApp.businessPermit}
-                        onView={() =>
-                          openImageModal(selectedApp.businessPermit)
-                        }
-                        onDownload={() =>
-                          downloadDocument(selectedApp.businessPermit)
-                        }
-                      />
-                    )}
-                    {selectedApp.bankStatement && (
-                      <ImageDocumentCard
-                        label="Bank Statement"
-                        imagePath={selectedApp.bankStatement}
-                        onView={() => openImageModal(selectedApp.bankStatement)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.bankStatement)
-                        }
-                      />
-                    )}
-                    {!selectedApp.validID &&
-                      !selectedApp.utilityBill &&
-                      !selectedApp.passportPhoto &&
-                      !selectedApp.cacCertificate &&
-                      !selectedApp.businessPermit &&
-                      !selectedApp.bankStatement && (
+                    {selectedApp.applicationLetter &&
+                      selectedApp.applicationLetter !== "null" && (
+                        <ImageDocumentCard
+                          label="Application Letter"
+                          imagePath={selectedApp.applicationLetter}
+                          onView={() =>
+                            openImageModal(selectedApp.applicationLetter)
+                          }
+                          onDownload={() =>
+                            downloadDocument(selectedApp.applicationLetter)
+                          }
+                        />
+                      )}
+                    {selectedApp.cacCertificate &&
+                      selectedApp.cacCertificate !== "null" && (
+                        <ImageDocumentCard
+                          label="CAC Certificate"
+                          imagePath={selectedApp.cacCertificate}
+                          onView={() =>
+                            openImageModal(selectedApp.cacCertificate)
+                          }
+                          onDownload={() =>
+                            downloadDocument(selectedApp.cacCertificate)
+                          }
+                        />
+                      )}
+                    {selectedApp.cac1_1Form &&
+                      selectedApp.cac1_1Form !== "null" && (
+                        <ImageDocumentCard
+                          label="CAC 1.1 Form"
+                          imagePath={selectedApp.cac1_1Form}
+                          onView={() => openImageModal(selectedApp.cac1_1Form)}
+                          onDownload={() =>
+                            downloadDocument(selectedApp.cac1_1Form)
+                          }
+                        />
+                      )}
+                    {selectedApp.proofOfAddress &&
+                      selectedApp.proofOfAddress !== "null" && (
+                        <ImageDocumentCard
+                          label="Proof of Address"
+                          imagePath={selectedApp.proofOfAddress}
+                          onView={() =>
+                            openImageModal(selectedApp.proofOfAddress)
+                          }
+                          onDownload={() =>
+                            downloadDocument(selectedApp.proofOfAddress)
+                          }
+                        />
+                      )}
+                    {(!selectedApp.applicationLetter ||
+                      selectedApp.applicationLetter === "null") &&
+                      (!selectedApp.cacCertificate ||
+                        selectedApp.cacCertificate === "null") &&
+                      (!selectedApp.cac1_1Form ||
+                        selectedApp.cac1_1Form === "null") &&
+                      (!selectedApp.proofOfAddress ||
+                        selectedApp.proofOfAddress === "null") && (
                         <div className="flex items-center gap-2 text-slate-500 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 col-span-full">
                           <Info className="w-4 h-4" />
                           <span className="text-sm font-medium">
@@ -942,7 +1111,10 @@ export default function AdminFirsApplications() {
                       ) : (
                         <>
                           <CheckCircle2 className="w-5 h-5" />
-                          Update Application
+                          {statusUpdate === "approved" &&
+                          selectedApp.status !== "approved"
+                            ? "Approve & Set Price"
+                            : "Update Application"}
                         </>
                       )}
                     </button>
@@ -1048,6 +1220,24 @@ function InfoItem({ icon: Icon, label, value, fullWidth = false }) {
 }
 
 function ArrayInfoItem({ label, value }) {
+  if (!value || value.length === 0) {
+    return (
+      <div className="bg-white rounded-xl p-4 border border-slate-200">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-slate-100 rounded-lg">
+            <Users className="w-4 h-4 text-slate-500 flex-shrink-0" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+              {label}
+            </p>
+            <span className="text-sm text-slate-400 italic">Not provided</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-xl p-4 border border-slate-200 hover:border-blue-300 transition-all shadow-sm hover:shadow">
       <div className="flex items-start gap-3">
@@ -1058,20 +1248,22 @@ function ArrayInfoItem({ label, value }) {
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
             {label}
           </p>
-          {value ? (
-            <div className="flex flex-wrap gap-2">
-              {value.map((item, idx) => (
+          <div className="flex flex-wrap gap-2">
+            {value.map((item, idx) => {
+              const displayValue =
+                typeof item === "object"
+                  ? item.name || JSON.stringify(item)
+                  : item;
+              return (
                 <span
                   key={idx}
                   className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 shadow-sm"
                 >
-                  {item}
+                  {displayValue}
                 </span>
-              ))}
-            </div>
-          ) : (
-            <span className="text-sm text-slate-400 italic">Not provided</span>
-          )}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

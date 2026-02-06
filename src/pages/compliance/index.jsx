@@ -52,6 +52,9 @@ export default function AdminCompliance() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showCostModal, setShowCostModal] = useState(false);
+  const [selectedItemForCost, setSelectedItemForCost] = useState(null);
+  const [completionPrice, setCompletionPrice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedUserForModal, setSelectedUserForModal] = useState(null);
   const [newCompliance, setNewCompliance] = useState({
@@ -104,25 +107,47 @@ export default function AdminCompliance() {
     }
   }
 
-  async function handleResolve(id) {
-    if (!confirm("Mark this compliance item as completed?")) return;
+  function openCostModal(item) {
+    setSelectedItemForCost(item);
+    setCompletionPrice(item.cost || "");
+    setShowCostModal(true);
+  }
+
+  async function handleResolveWithCost() {
+    if (
+      completionPrice === "" ||
+      isNaN(completionPrice) ||
+      Number(completionPrice) < 0
+    ) {
+      toast.error("Please enter a valid price (0 or greater)");
+      return;
+    }
 
     try {
+      setIsSubmitting(true);
       const res = await fetch(
-        `${API_BASE_URL}/admin/compliance/${id}/resolve`,
+        `${API_BASE_URL}/admin/compliance/${selectedItemForCost.id}/resolve`,
         {
           method: "PATCH",
           headers: {
-            Authorization: `Bearer ${token}`
-          }
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ price: Number(completionPrice) })
         }
       );
 
       if (!res.ok) throw new Error("Failed to resolve item");
 
+      toast.success("Compliance item marked as completed");
+      setShowCostModal(false);
+      setSelectedItemForCost(null);
+      setCompletionPrice("");
       fetchCompliance();
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -164,7 +189,7 @@ export default function AdminCompliance() {
         status: "Pending"
       });
 
-      fetchCompliance(); // refresh list from backend
+      fetchCompliance();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -190,7 +215,7 @@ export default function AdminCompliance() {
         throw new Error(data.message || "Failed to remove compliance");
 
       toast.success(data.message);
-      fetchCompliance(); // refresh list
+      fetchCompliance();
     } catch (err) {
       toast.error(err.message);
     }
@@ -229,122 +254,6 @@ export default function AdminCompliance() {
     setShowAddModal(true);
   }
 
-  async function handleResolve(id) {
-    if (!confirm("Mark this compliance item as completed?")) return;
-
-    try {
-      setActionLoading(id);
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      setItems(
-        items.map((item) =>
-          item.id === id ? { ...item, status: "Completed" } : item
-        )
-      );
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
-  async function handleAddCompliance() {
-    // Validation
-    if (
-      !newCompliance.title ||
-      !newCompliance.description ||
-      !newCompliance.cost
-    ) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-
-    // Validate target selection
-    if (newCompliance.targetType === "user" && !newCompliance.userId) {
-      toast.error("Please select a user");
-      return;
-    }
-
-    if (newCompliance.targetType === "sector" && !newCompliance.sector) {
-      toast.error("Please select a sector");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const token = localStorage.getItem("token");
-
-      // Prepare payload for backend
-      const payload = {
-        title: newCompliance.title,
-        description: newCompliance.description,
-        cost: Number(newCompliance.cost),
-        expiryDate: newCompliance.expiryDate || null,
-        fullName: null, // optional, we can set it if targetType is "user"
-        sector: "" // will set below
-      };
-
-      if (newCompliance.targetType === "user") {
-        payload.userId = newCompliance.userId;
-        const selectedUser = users.find((u) => u.id === newCompliance.userId);
-        payload.fullName = selectedUser?.fullName || newCompliance.title;
-        payload.sector = "individual"; // backend will recognize single user
-      } else if (newCompliance.targetType === "sector") {
-        payload.sector = newCompliance.sector.toLowerCase(); // e.g., "finance", "health", or "all"
-      } else if (newCompliance.targetType === "all") {
-        payload.sector = "all"; // assign to all users
-      }
-
-      const res = await fetch(`${API_BASE_URL}/admin/compliances`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to add compliance");
-
-      toast.success(data.message);
-
-      // Reset form and modal
-      setShowAddModal(false);
-      setSelectedUserForModal(null);
-      setNewCompliance({
-        userId: "",
-        title: "",
-        description: "",
-        cost: "",
-        status: "Pending",
-        targetType: "user",
-        sector: ""
-      });
-
-      fetchCompliance(); // refresh list from backend
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleRemove(id) {
-    if (!confirm("Remove this compliance item permanently?")) return;
-
-    try {
-      setActionLoading(id);
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setItems(items.filter((item) => item.id !== id));
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
   const complianceByUser = items.reduce((acc, item) => {
     const userKey = item.User
       ? `${item.User.id}|${item.User.fullName} (${item.User.email})`
@@ -355,7 +264,7 @@ export default function AdminCompliance() {
     return acc;
   }, {});
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (complianceStatus) => {
     const statusConfig = {
       Completed: {
         bg: "bg-emerald-50",
@@ -369,20 +278,21 @@ export default function AdminCompliance() {
         border: "border-amber-200",
         icon: <Clock className="w-3.5 h-3.5" />
       },
-      Overdue: {
-        bg: "bg-red-50",
-        text: "text-red-700",
-        border: "border-red-200",
-        icon: <XCircle className="w-3.5 h-3.5" />
+      "Not Started": {
+        bg: "bg-gray-50",
+        text: "text-gray-700",
+        border: "border-gray-200",
+        icon: <AlertCircle className="w-3.5 h-3.5" />
       }
     };
-    const config = statusConfig[status] || statusConfig.Pending;
+    const config =
+      statusConfig[complianceStatus] || statusConfig["Not Started"];
     return (
       <span
         className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border ${config.bg} ${config.text} ${config.border}`}
       >
         {config.icon}
-        {status}
+        {complianceStatus}
       </span>
     );
   };
@@ -406,7 +316,7 @@ export default function AdminCompliance() {
 
       const hasMatchingItems = userItems.some((item) => {
         const matchesStatus =
-          statusFilter === "all" || item.status === statusFilter;
+          statusFilter === "all" || item.complianceStatus === statusFilter;
         return matchesStatus;
       });
 
@@ -417,7 +327,7 @@ export default function AdminCompliance() {
   const getFilteredItems = (userItems) => {
     return userItems.filter((item) => {
       const matchesStatus =
-        statusFilter === "all" || item.status === statusFilter;
+        statusFilter === "all" || item.complianceStatus === statusFilter;
       return matchesStatus;
     });
   };
@@ -431,9 +341,13 @@ export default function AdminCompliance() {
   const getTotalStats = () => {
     return {
       total: items.length,
-      completed: items.filter((d) => d.status === "Completed").length,
-      pending: items.filter((d) => d.status === "Pending").length,
-      overdue: items.filter((d) => d.status === "Overdue").length
+      completed: items.filter((d) => d.complianceStatus === "Completed").length,
+      pending: items.filter(
+        (d) =>
+          d.complianceStatus === "Pending" ||
+          d.complianceStatus === "Not Started"
+      ).length,
+      overdue: items.filter((d) => d.documentStatus === "Expired").length
     };
   };
 
@@ -620,7 +534,7 @@ export default function AdminCompliance() {
               <option value="all">All Statuses</option>
               <option value="Completed">✓ Completed</option>
               <option value="Pending">⏰ Pending</option>
-              <option value="Overdue">✗ Overdue</option>
+              <option value="Not Started">○ Not Started</option>
             </select>
           </div>
 
@@ -724,22 +638,28 @@ export default function AdminCompliance() {
                       </button>
                       <div className="hidden sm:flex items-center gap-2">
                         {filteredItems.some(
-                          (d) => d.status === "Completed"
+                          (d) => d.complianceStatus === "Completed"
                         ) && (
                           <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">
                             {
                               filteredItems.filter(
-                                (d) => d.status === "Completed"
+                                (d) => d.complianceStatus === "Completed"
                               ).length
                             }{" "}
                             Completed
                           </span>
                         )}
-                        {filteredItems.some((d) => d.status === "Pending") && (
+                        {filteredItems.some(
+                          (d) =>
+                            d.complianceStatus === "Pending" ||
+                            d.complianceStatus === "Not Started"
+                        ) && (
                           <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">
                             {
                               filteredItems.filter(
-                                (d) => d.status === "Pending"
+                                (d) =>
+                                  d.complianceStatus === "Pending" ||
+                                  d.complianceStatus === "Not Started"
                               ).length
                             }{" "}
                             Pending
@@ -783,12 +703,11 @@ export default function AdminCompliance() {
                                         {item.description}
                                       </p>
                                     </div>
-                                    {getStatusBadge(item.status)}
+                                    {getStatusBadge(item.complianceStatus)}
                                   </div>
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                      {/* <DollarSign className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" /> */}
                                       <div className="min-w-0">
                                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                           Cost
@@ -896,10 +815,10 @@ export default function AdminCompliance() {
                                       </button>
                                     )}
 
-                                    {item.status !== "Completed" && (
+                                    {item.complianceStatus !== "Completed" && (
                                       <button
                                         disabled={actionLoading === item.id}
-                                        onClick={() => handleResolve(item.id)}
+                                        onClick={() => openCostModal(item)}
                                         className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
                                       >
                                         {actionLoading === item.id ? (
@@ -939,11 +858,101 @@ export default function AdminCompliance() {
         )}
       </div>
 
+      {/* Cost Modal for Completing Item */}
+      {showCostModal && selectedItemForCost && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-emerald-600 to-green-700 p-6 flex items-center justify-between rounded-t-2xl">
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-1">
+                  Complete Compliance
+                </h2>
+                <p className="text-emerald-100 text-sm">
+                  Set the final price for this item
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCostModal(false);
+                  setSelectedItemForCost(null);
+                  setCompletionPrice("");
+                }}
+                className="w-10 h-10 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                <h3 className="font-semibold text-gray-900 mb-1">
+                  {selectedItemForCost.title}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {selectedItemForCost.description}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Final Price (₦) *
+                </label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={completionPrice}
+                    onChange={(e) => setCompletionPrice(e.target.value)}
+                    placeholder="Enter final price (can be 0.00)"
+                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Current cost: ₦{selectedItemForCost.cost}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 border-t border-gray-200 p-6 flex gap-3 rounded-b-2xl">
+              <button
+                onClick={() => {
+                  setShowCostModal(false);
+                  setSelectedItemForCost(null);
+                  setCompletionPrice("");
+                }}
+                disabled={isSubmitting}
+                className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResolveWithCost}
+                disabled={isSubmitting}
+                className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-700 text-white font-semibold hover:from-emerald-700 hover:to-green-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Completing...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    Complete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Compliance Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            {/* Header */}
             <div className="sticky top-0 bg-gradient-to-r from-red-600 to-orange-700 p-6 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-white mb-1">
@@ -966,7 +975,6 @@ export default function AdminCompliance() {
               </button>
             </div>
 
-            {/* Body */}
             <div className="p-6 space-y-5">
               {!selectedUserForModal && (
                 <div>
@@ -992,7 +1000,6 @@ export default function AdminCompliance() {
                 </div>
               )}
 
-              {/* Select User */}
               {!selectedUserForModal && newCompliance.targetType === "user" && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1018,7 +1025,6 @@ export default function AdminCompliance() {
                 </div>
               )}
 
-              {/* Select Sector */}
               {!selectedUserForModal &&
                 newCompliance.targetType === "sector" && (
                   <div>
@@ -1046,7 +1052,6 @@ export default function AdminCompliance() {
                   </div>
                 )}
 
-              {/* Title */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Title *
@@ -1065,7 +1070,6 @@ export default function AdminCompliance() {
                 />
               </div>
 
-              {/* Description */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Description *
@@ -1084,7 +1088,6 @@ export default function AdminCompliance() {
                 />
               </div>
 
-              {/* Cost */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Cost (₦) *
@@ -1100,7 +1103,6 @@ export default function AdminCompliance() {
                 />
               </div>
 
-              {/* Status */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Status
@@ -1122,7 +1124,6 @@ export default function AdminCompliance() {
               </div>
             </div>
 
-            {/* Footer */}
             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-6 flex gap-3">
               <button
                 onClick={() => {

@@ -43,12 +43,10 @@ export default function AdminConsoleLayout() {
           w-72 bg-white/95 backdrop-blur-xl border-r border-blue-100 flex flex-col
           shadow-xl shadow-blue-500/5
           transform transition-transform duration-300
-          ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-          }
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
-        {/* Logo with Gradient Background */}
+        {/* Logo */}
         <div className="relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-700" />
           <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=400&q=80')] opacity-10 bg-cover" />
@@ -80,12 +78,6 @@ export default function AdminConsoleLayout() {
               icon={<LayoutDashboard className="w-5 h-5" />}
               onNavigate={() => setSidebarOpen(false)}
             />
-            {/* <AdminLink
-              to="/admin/activity"
-              label="System Activity"
-              icon={<Activity className="w-5 h-5" />}
-              onNavigate={() => setSidebarOpen(false)}
-            /> */}
           </NavSection>
 
           <NavSection label="User Management">
@@ -126,15 +118,6 @@ export default function AdminConsoleLayout() {
               onNavigate={() => setSidebarOpen(false)}
             />
           </NavSection>
-
-          {/* <NavSection label="System">
-            <AdminLink
-              to="/admin/settings"
-              label="Platform Settings"
-              icon={<Settings className="w-5 h-5" />}
-              onNavigate={() => setSidebarOpen(false)}
-            />
-          </NavSection> */}
         </nav>
 
         {/* Footer */}
@@ -178,6 +161,30 @@ export default function AdminConsoleLayout() {
           </div>
           <div className="w-10" />
         </header>
+
+        {/* Dashboard Buttons */}
+        <div className="p-6 space-y-4 bg-blue-50/50 border-b border-blue-100 flex flex-col md:flex-row md:space-x-4 md:space-y-0">
+          <button
+            onClick={() => navigate("/admin/cac")}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg"
+          >
+            View CAC Applications
+          </button>
+
+          <button
+            onClick={() => navigate("/admin/firs")}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-amber-700 transition-all duration-200 shadow-md hover:shadow-lg"
+          >
+            View FIRS Applications
+          </button>
+
+          <button
+            onClick={() => navigate("/admin/sculm")}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl font-semibold hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg"
+          >
+            View SCUML Applications
+          </button>
+        </div>
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
@@ -230,7 +237,6 @@ function AdminLink({ to, label, icon, onNavigate }) {
             </span>
             <span>{label}</span>
           </div>
-
           {isActive && <ChevronRight className="w-4 h-4 animate-pulse" />}
         </>
       )}

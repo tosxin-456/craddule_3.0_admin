@@ -33,10 +33,13 @@ import {
   Info,
   Image as ImageIcon,
   FileImage,
-  ShieldCheck
+  ShieldCheck,
+  Phone,
+  Mail,
+  Shield
 } from "lucide-react";
 
-export default function AdminscumlApplications() {
+export default function AdminScumlApplications() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -49,6 +52,12 @@ export default function AdminscumlApplications() {
   const [updating, setUpdating] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+
+  // Price modal states
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [priceValue, setPriceValue] = useState("");
+  const [settingPrice, setSettingPrice] = useState(false);
+  const [pendingApprovalApp, setPendingApprovalApp] = useState(null);
 
   const token = localStorage.getItem("token");
 
@@ -116,7 +125,76 @@ export default function AdminscumlApplications() {
 
   const closeModal = () => setSelectedApp(null);
 
+  const openPriceModal = (app) => {
+    setPendingApprovalApp(app);
+    setPriceValue(app.price || "");
+    setShowPriceModal(true);
+  };
+
+  const closePriceModal = () => {
+    setShowPriceModal(false);
+    setPriceValue("");
+    setPendingApprovalApp(null);
+  };
+
+  const submitPrice = async () => {
+    if (!priceValue || isNaN(priceValue) || Number(priceValue) <= 0) {
+      return toast.error("Please enter a valid price");
+    }
+
+    setSettingPrice(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/admin/scuml-applications/${pendingApprovalApp.id}/update`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            status: "approved",
+            adminFeedback: feedbackUpdate,
+            price: Number(priceValue)
+          })
+        }
+      );
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Application approved with price successfully");
+        setApplications((prev) =>
+          prev.map((app) =>
+            app.id === pendingApprovalApp.id
+              ? {
+                  ...app,
+                  status: "approved",
+                  adminFeedback: feedbackUpdate,
+                  price: Number(priceValue)
+                }
+              : app
+          )
+        );
+        closePriceModal();
+        closeModal();
+      } else {
+        toast.error(data.message || "Failed to approve application");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to approve application");
+    } finally {
+      setSettingPrice(false);
+    }
+  };
+
   const updateApplication = async () => {
+    // If status is being changed to approved, show price modal
+    if (statusUpdate === "approved" && selectedApp.status !== "approved") {
+      openPriceModal(selectedApp);
+      return;
+    }
+
+    // For non-approval updates, proceed normally
     setUpdating(true);
     try {
       const res = await fetch(
@@ -198,7 +276,7 @@ export default function AdminscumlApplications() {
   };
 
   const filteredApplications = applications.filter((app) => {
-    const matchesSearch = (app.cooperativeName || "")
+    const matchesSearch = (app.businessName || "")
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === "all" || app.status === filterStatus;
@@ -248,10 +326,10 @@ export default function AdminscumlApplications() {
               </div>
               <div>
                 <h1 className="text-3xl lg:text-4xl font-bold text-slate-800 mb-1">
-                  scuml Applications
+                  SCUML Applications
                 </h1>
                 <p className="text-slate-500 text-sm lg:text-base">
-                  Manage and review Cooperative Society registrations
+                  Manage and review Money Service Business registrations
                 </p>
               </div>
             </div>
@@ -309,7 +387,7 @@ export default function AdminscumlApplications() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
               <input
                 type="text"
-                placeholder="Search by cooperative name..."
+                placeholder="Search by business name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400 outline-none transition-all bg-slate-50 focus:bg-white"
@@ -346,7 +424,7 @@ export default function AdminscumlApplications() {
               <p className="text-slate-500 leading-relaxed">
                 {searchTerm || filterStatus !== "all"
                   ? "Try adjusting your search criteria or filters to find what you're looking for."
-                  : "There are no scuml applications available at the moment. New applications will appear here."}
+                  : "There are no SCUML applications available at the moment. New applications will appear here."}
               </p>
             </div>
           </div>
@@ -368,33 +446,34 @@ export default function AdminscumlApplications() {
                   ></div>
 
                   <div className="p-6">
-                    {/* Cooperative Header */}
+                    {/* Business Header */}
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
                           <div className="p-2.5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl group-hover:from-blue-100 group-hover:to-indigo-100 transition-colors shadow-sm">
-                            <Users className="w-5 h-5 text-blue-600" />
+                            <Building2 className="w-5 h-5 text-blue-600" />
                           </div>
                           <h3 className="font-bold text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors text-lg">
-                            {app.cooperativeName}
+                            {app.businessName}
                           </h3>
                         </div>
-                        {app.cooperativeType && (
+                        {app.businessCategory && (
                           <p className="text-sm text-slate-500 font-medium ml-12 flex items-center gap-1">
                             <BriefcaseIcon className="w-3.5 h-3.5" />
-                            {app.cooperativeType}
+                            {app.businessCategory}
                           </p>
                         )}
-                        {app.registrationType && (
-                          <p className="text-xs text-slate-400 font-medium ml-12 mt-1">
-                            {app.registrationType}
+                        {app.rcNumber && (
+                          <p className="text-xs text-slate-400 font-medium ml-12 mt-1 flex items-center gap-1">
+                            <Hash className="w-3 h-3" />
+                            RC: {app.rcNumber}
                           </p>
                         )}
                       </div>
                     </div>
 
                     {/* Status Badge */}
-                    <div className="mb-5">
+                    <div className="mb-5 flex flex-wrap gap-2">
                       <div
                         className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border ${statusConfig.bg} ${statusConfig.border} ${statusConfig.text} text-sm font-semibold shadow-sm`}
                       >
@@ -404,46 +483,74 @@ export default function AdminscumlApplications() {
                         <StatusIcon className="w-4 h-4" />
                         {statusConfig.label}
                       </div>
+                      {/* Payment Status Badge */}
+                      {app.isPaid && (
+                        <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border bg-green-50 border-green-200 text-green-700 text-sm font-semibold shadow-sm">
+                          <CheckCircle2 className="w-4 h-4" />
+                          Paid
+                        </div>
+                      )}
+                      {!app.isPaid && app.status === "approved" && (
+                        <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border bg-orange-50 border-orange-200 text-orange-700 text-sm font-semibold shadow-sm">
+                          <Clock className="w-4 h-4" />
+                          Pending Payment
+                        </div>
+                      )}
                     </div>
 
                     {/* Quick Info */}
                     <div className="space-y-3 mb-5">
-                      {app.stateOfOperation && (
-                        <div className="flex items-center gap-2.5 text-sm group/item">
-                          <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
-                            <MapPin className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
-                          </div>
-                          <span className="text-slate-500 font-medium">
-                            State:
-                          </span>
-                          <span className="text-slate-800 font-semibold">
-                            {app.stateOfOperation}
-                          </span>
-                        </div>
-                      )}
-                      {app.membershipSize && (
-                        <div className="flex items-center gap-2.5 text-sm group/item">
-                          <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
-                            <Users className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
-                          </div>
-                          <span className="text-slate-500 font-medium">
-                            Members:
-                          </span>
-                          <span className="text-slate-800 font-semibold">
-                            {app.membershipSize}
-                          </span>
-                        </div>
-                      )}
-                      {app.dateOfFormation && (
+                      {app.dateOfIncorporation && (
                         <div className="flex items-center gap-2.5 text-sm group/item">
                           <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
                             <Calendar className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
                           </div>
                           <span className="text-slate-500 font-medium">
-                            Formed:
+                            Incorporated:
                           </span>
                           <span className="text-slate-800 font-semibold">
-                            {new Date(app.dateOfFormation).toLocaleDateString()}
+                            {new Date(
+                              app.dateOfIncorporation
+                            ).toLocaleDateString()}
+                          </span>
+                        </div>
+                      )}
+                      {app.tin && (
+                        <div className="flex items-center gap-2.5 text-sm group/item">
+                          <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
+                            <Hash className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
+                          </div>
+                          <span className="text-slate-500 font-medium">
+                            TIN:
+                          </span>
+                          <span className="text-slate-800 font-semibold">
+                            {app.tin}
+                          </span>
+                        </div>
+                      )}
+                      {app.email && (
+                        <div className="flex items-center gap-2.5 text-sm group/item">
+                          <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
+                            <Mail className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
+                          </div>
+                          <span className="text-slate-500 font-medium">
+                            Email:
+                          </span>
+                          <span className="text-slate-800 font-semibold truncate">
+                            {app.email}
+                          </span>
+                        </div>
+                      )}
+                      {app.price && app.status === "approved" && (
+                        <div className="flex items-center gap-2.5 text-sm group/item">
+                          <div className="p-1.5 bg-emerald-100 rounded-lg group-hover/item:bg-emerald-200 transition-colors">
+                            <DollarSign className="w-3.5 h-3.5 text-emerald-600 group-hover/item:text-emerald-700 transition-colors" />
+                          </div>
+                          <span className="text-slate-500 font-medium">
+                            Price:
+                          </span>
+                          <span className="text-emerald-700 font-bold">
+                            ₦{Number(app.price).toLocaleString()}
                           </span>
                         </div>
                       )}
@@ -487,7 +594,119 @@ export default function AdminscumlApplications() {
           </div>
         )}
 
-        {/* MODAL */}
+        {/* PRICE MODAL */}
+        {showPriceModal && pendingApprovalApp && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-center z-[70] p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl relative animate-in slide-in-from-bottom-8 duration-300">
+              {/* Price Modal Header */}
+              <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white p-6 rounded-t-3xl">
+                <button
+                  onClick={closePriceModal}
+                  className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-xl transition-all group"
+                >
+                  <X className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
+                    <DollarSign className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold">
+                      Set Application Price
+                    </h3>
+                    <p className="text-emerald-100 text-sm mt-1">
+                      {pendingApprovalApp.businessName}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price Modal Content */}
+              <div className="p-6 space-y-5">
+                <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-emerald-100 rounded-lg">
+                      <Info className="w-5 h-5 text-emerald-700" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Approval Confirmation
+                      </p>
+                      <p className="text-xs text-emerald-700 mt-1">
+                        Please set the price for this SCUML application before
+                        approving it.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2.5 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4" />
+                    Application Price (₦)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">
+                      ₦
+                    </span>
+                    <input
+                      type="number"
+                      value={priceValue}
+                      onChange={(e) => setPriceValue(e.target.value)}
+                      placeholder="Enter amount"
+                      min="0"
+                      step="1"
+                      className="w-full pl-10 pr-4 py-4 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-400 outline-none transition-all text-lg font-semibold text-slate-800 placeholder:text-slate-400 placeholder:font-normal"
+                    />
+                  </div>
+                  {priceValue &&
+                    !isNaN(priceValue) &&
+                    Number(priceValue) > 0 && (
+                      <p className="mt-2 text-sm text-slate-600 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span className="font-semibold">
+                          ₦{Number(priceValue).toLocaleString()}
+                        </span>
+                      </p>
+                    )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={closePriceModal}
+                    className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all border-2 border-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitPrice}
+                    disabled={
+                      settingPrice ||
+                      !priceValue ||
+                      isNaN(priceValue) ||
+                      Number(priceValue) <= 0
+                    }
+                    className="flex-1 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-400 text-white font-bold rounded-xl shadow-lg hover:shadow-xl disabled:shadow-none transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed"
+                  >
+                    {settingPrice ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Approving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-5 h-5" />
+                        Approve & Set Price
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MAIN APPLICATION MODAL */}
         {selectedApp && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-start pt-8 sm:pt-12 z-50 p-4 overflow-y-auto animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl relative my-8 animate-in slide-in-from-bottom-8 duration-300">
@@ -505,20 +724,27 @@ export default function AdminscumlApplications() {
                   </div>
                   <div className="flex-1">
                     <h2 className="text-3xl font-bold mb-2">
-                      {selectedApp.cooperativeName}
+                      {selectedApp.businessName}
                     </h2>
                     <div className="flex flex-wrap gap-3 items-center">
-                      {selectedApp.cooperativeType && (
+                      {selectedApp.businessCategory && (
                         <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-semibold">
-                          {selectedApp.cooperativeType}
+                          {selectedApp.businessCategory}
                         </span>
                       )}
-                      {selectedApp.registrationType && (
+                      {selectedApp.rcNumber && (
                         <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-semibold flex items-center gap-1.5">
-                          <FileText className="w-3.5 h-3.5" />
-                          {selectedApp.registrationType}
+                          <Hash className="w-3.5 h-3.5" />
+                          RC: {selectedApp.rcNumber}
                         </span>
                       )}
+                      {selectedApp.price &&
+                        selectedApp.status === "approved" && (
+                          <span className="px-3 py-1.5 bg-emerald-500/30 backdrop-blur-sm rounded-lg text-sm font-bold flex items-center gap-1.5">
+                            <DollarSign className="w-3.5 h-3.5" />₦
+                            {Number(selectedApp.price).toLocaleString()}
+                          </span>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -526,105 +752,48 @@ export default function AdminscumlApplications() {
 
               {/* Modal Content */}
               <div className="p-8 space-y-6 max-h-[calc(90vh-240px)] overflow-y-auto">
-                {/* Basic Information */}
+                {/* Business Information */}
                 <Section
-                  title="Cooperative Information"
+                  title="Business Information"
                   icon={Building2}
                   gradient="from-blue-500 to-indigo-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <InfoItem
-                      icon={Users}
-                      label="Cooperative Name"
-                      value={selectedApp.cooperativeName}
-                    />
-                    <InfoItem
-                      icon={FileText}
-                      label="Alternative Name"
-                      value={selectedApp.alternativeName}
+                      icon={Building2}
+                      label="Business Name"
+                      value={selectedApp.businessName}
                     />
                     <InfoItem
                       icon={Briefcase}
-                      label="Cooperative Type"
-                      value={selectedApp.cooperativeType}
+                      label="Business Category"
+                      value={selectedApp.businessCategory}
                     />
                     <InfoItem
-                      icon={FileText}
-                      label="Registration Type"
-                      value={selectedApp.registrationType}
+                      icon={Hash}
+                      label="RC Number"
+                      value={selectedApp.rcNumber}
                     />
+                    <InfoItem icon={Hash} label="TIN" value={selectedApp.tin} />
                     <InfoItem
-                      icon={Calendar}
-                      label="Date of Formation"
+                      icon={Hash}
+                      label="BN Number"
                       value={
-                        selectedApp.dateOfFormation
-                          ? new Date(
-                              selectedApp.dateOfFormation
-                            ).toLocaleDateString()
+                        selectedApp.bnNumber && selectedApp.bnNumber !== "null"
+                          ? selectedApp.bnNumber
                           : null
                       }
                     />
                     <InfoItem
-                      icon={Users}
-                      label="Membership Size"
-                      value={selectedApp.membershipSize}
-                    />
-                    <InfoItem
-                      icon={Hash}
-                      label="Previous Reg Number"
-                      value={selectedApp.previousRegNumber}
-                    />
-                    <InfoItem
-                      icon={Hash}
-                      label="CAC ID"
-                      value={selectedApp.cacId}
-                    />
-                    <InfoItem
-                      icon={DollarSign}
-                      label="Shares Value"
-                      value={selectedApp.sharesValue}
-                    />
-                    <InfoItem
-                      icon={DollarSign}
-                      label="Entrance Fee"
-                      value={selectedApp.entranceFee}
-                    />
-                    <InfoItem
-                      icon={DollarSign}
-                      label="Projected Annual Turnover"
-                      value={selectedApp.projectedAnnualTurnover}
-                    />
-                  </div>
-                </Section>
-
-                {/* Location Information */}
-                <Section
-                  title="Location Details"
-                  icon={MapPin}
-                  gradient="from-purple-500 to-pink-500"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    <InfoItem
-                      icon={MapPin}
-                      label="State of Operation"
-                      value={selectedApp.stateOfOperation}
-                    />
-                    <InfoItem
-                      icon={MapPin}
-                      label="LGA of Operation"
-                      value={selectedApp.lgaOfOperation}
-                    />
-                    <InfoItem
-                      icon={Home}
-                      label="Registered Address"
-                      value={selectedApp.registeredAddress}
-                      fullWidth
-                    />
-                    <InfoItem
-                      icon={Home}
-                      label="Contact Address"
-                      value={selectedApp.contactAddress}
-                      fullWidth
+                      icon={Calendar}
+                      label="Date of Incorporation"
+                      value={
+                        selectedApp.dateOfIncorporation
+                          ? new Date(
+                              selectedApp.dateOfIncorporation
+                            ).toLocaleDateString()
+                          : null
+                      }
                     />
                   </div>
                 </Section>
@@ -632,98 +801,82 @@ export default function AdminscumlApplications() {
                 {/* Contact Information */}
                 <Section
                   title="Contact Information"
-                  icon={FileText}
+                  icon={Mail}
                   gradient="from-teal-500 to-cyan-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <InfoItem
-                      icon={FileText}
-                      label="Email"
-                      value={selectedApp.cooperativeEmail}
+                      icon={Mail}
+                      label="Email Address"
+                      value={selectedApp.email}
                     />
                     <InfoItem
-                      icon={FileText}
-                      label="Phone"
-                      value={selectedApp.cooperativePhone}
-                    />
-                    <InfoItem
-                      icon={FileText}
-                      label="Website URL"
-                      value={selectedApp.websiteUrl}
+                      icon={Phone}
+                      label="Phone Number"
+                      value={selectedApp.phoneNumber}
                     />
                   </div>
                 </Section>
 
-                {/* Leadership Information */}
+                {/* Office Addresses */}
                 <Section
-                  title="Leadership & Officials"
-                  icon={User}
+                  title="Office Addresses"
+                  icon={MapPin}
+                  gradient="from-purple-500 to-pink-500"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <InfoItem
+                      icon={Home}
+                      label="Registered Office Address"
+                      value={selectedApp.registeredOfficeAddress}
+                      fullWidth
+                    />
+                    <InfoItem
+                      icon={Home}
+                      label="Branch Office Address"
+                      value={
+                        selectedApp.branchOfficeAddress &&
+                        selectedApp.branchOfficeAddress !== "null"
+                          ? selectedApp.branchOfficeAddress
+                          : null
+                      }
+                      fullWidth
+                    />
+                  </div>
+                </Section>
+
+                {/* Compliance Officer Information */}
+                <Section
+                  title="Compliance Officer Details"
+                  icon={Shield}
                   gradient="from-orange-500 to-red-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <InfoItem
                       icon={User}
-                      label="President"
-                      value={selectedApp.president}
+                      label="Compliance Officer Name"
+                      value={selectedApp.complianceOfficerName}
                     />
                     <InfoItem
-                      icon={User}
-                      label="Vice President"
-                      value={selectedApp.vicePresident}
+                      icon={Briefcase}
+                      label="Designation"
+                      value={selectedApp.complianceOfficerDesignation}
                     />
                     <InfoItem
-                      icon={User}
-                      label="Secretary"
-                      value={selectedApp.secretary}
+                      icon={Mail}
+                      label="Email"
+                      value={selectedApp.complianceOfficerEmail}
                     />
                     <InfoItem
-                      icon={User}
-                      label="Treasurer"
-                      value={selectedApp.treasurer}
-                    />
-                  </div>
-                </Section>
-
-                {/* Additional Details */}
-                <Section
-                  title="Additional Information"
-                  icon={Clipboard}
-                  gradient="from-pink-500 to-rose-500"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <InfoItem
-                      icon={FileText}
-                      label="Main Objectives"
-                      value={selectedApp.mainObjectives}
-                      fullWidth
-                    />
-                    <InfoItem
-                      icon={FileText}
-                      label="Business Activities"
-                      value={selectedApp.businessActivities}
-                      fullWidth
-                    />
-                    <InfoItem
-                      icon={FileText}
-                      label="Source of Funds"
-                      value={selectedApp.sourceOfFunds}
-                      fullWidth
-                    />
-                    <InfoItem
-                      icon={FileText}
-                      label="Affiliated Union"
-                      value={selectedApp.affiliatedUnion}
-                    />
-                    <InfoItem
-                      icon={FileText}
-                      label="Affiliated Federation"
-                      value={selectedApp.affiliatedFederation}
+                      icon={Phone}
+                      label="Phone"
+                      value={selectedApp.complianceOfficerPhone}
                     />
                   </div>
                 </Section>
 
                 {/* Banking Information */}
-                {(selectedApp.bankName || selectedApp.accountNumber) && (
+                {selectedApp.bankers && (
                   <Section
                     title="Banking Information"
                     icon={CreditCard}
@@ -732,49 +885,24 @@ export default function AdminscumlApplications() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                       <InfoItem
                         icon={Building2}
-                        label="Bank Name"
-                        value={selectedApp.bankName}
-                      />
-                      <InfoItem
-                        icon={Hash}
-                        label="Account Number"
-                        value={selectedApp.accountNumber}
-                      />
-                      <InfoItem
-                        icon={User}
-                        label="Account Name"
-                        value={selectedApp.accountName}
+                        label="Bankers"
+                        value={selectedApp.bankers}
                       />
                     </div>
                   </Section>
                 )}
 
-                {/* Committee Members */}
-                {(parseArray(selectedApp.boardMembers) ||
-                  parseArray(selectedApp.executiveCommittee) ||
-                  parseArray(selectedApp.supervisoryCommittee) ||
-                  parseArray(selectedApp.members)) && (
+                {/* Directors */}
+                {parseArray(selectedApp.directors) && (
                   <Section
-                    title="Committees & Members"
+                    title="Directors"
                     icon={Users}
                     gradient="from-violet-500 to-purple-500"
                   >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <ArrayInfoItem
-                        label="Board Members"
-                        value={parseArray(selectedApp.boardMembers)}
-                      />
-                      <ArrayInfoItem
-                        label="Executive Committee"
-                        value={parseArray(selectedApp.executiveCommittee)}
-                      />
-                      <ArrayInfoItem
-                        label="Supervisory Committee"
-                        value={parseArray(selectedApp.supervisoryCommittee)}
-                      />
-                      <ArrayInfoItem
-                        label="Members"
-                        value={parseArray(selectedApp.members)}
+                        label="Company Directors"
+                        value={parseArray(selectedApp.directors)}
                       />
                     </div>
                   </Section>
@@ -787,137 +915,78 @@ export default function AdminscumlApplications() {
                   gradient="from-amber-500 to-yellow-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {selectedApp.constitution && (
+                    {selectedApp.certificateOfIncorporation && (
                       <ImageDocumentCard
-                        label="Constitution"
-                        imagePath={selectedApp.constitution}
-                        onView={() => openImageModal(selectedApp.constitution)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.constitution)
-                        }
-                      />
-                    )}
-                    {selectedApp.utilityBill && (
-                      <ImageDocumentCard
-                        label="Utility Bill"
-                        imagePath={selectedApp.utilityBill}
-                        onView={() => openImageModal(selectedApp.utilityBill)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.utilityBill)
-                        }
-                      />
-                    )}
-                    {selectedApp.cacCertificate && (
-                      <ImageDocumentCard
-                        label="CAC Certificate"
-                        imagePath={selectedApp.cacCertificate}
+                        label="Certificate of Incorporation"
+                        imagePath={selectedApp.certificateOfIncorporation}
                         onView={() =>
-                          openImageModal(selectedApp.cacCertificate)
+                          openImageModal(selectedApp.certificateOfIncorporation)
                         }
                         onDownload={() =>
-                          downloadDocument(selectedApp.cacCertificate)
+                          downloadDocument(
+                            selectedApp.certificateOfIncorporation
+                          )
                         }
                       />
                     )}
-                    {selectedApp.affidavit && (
+                    {selectedApp.memart && (
                       <ImageDocumentCard
-                        label="Affidavit"
-                        imagePath={selectedApp.affidavit}
-                        onView={() => openImageModal(selectedApp.affidavit)}
+                        label="MEMART"
+                        imagePath={selectedApp.memart}
+                        onView={() => openImageModal(selectedApp.memart)}
+                        onDownload={() => downloadDocument(selectedApp.memart)}
+                      />
+                    )}
+                    {selectedApp.cacForm1_1 && (
+                      <ImageDocumentCard
+                        label="CAC Form 1.1"
+                        imagePath={selectedApp.cacForm1_1}
+                        onView={() => openImageModal(selectedApp.cacForm1_1)}
                         onDownload={() =>
-                          downloadDocument(selectedApp.affidavit)
+                          downloadDocument(selectedApp.cacForm1_1)
                         }
                       />
                     )}
-                    {selectedApp.passportPhotos && (
+                    {selectedApp.tinPrintout && (
                       <ImageDocumentCard
-                        label="Passport Photos"
-                        imagePath={selectedApp.passportPhotos}
+                        label="TIN Printout"
+                        imagePath={selectedApp.tinPrintout}
+                        onView={() => openImageModal(selectedApp.tinPrintout)}
+                        onDownload={() =>
+                          downloadDocument(selectedApp.tinPrintout)
+                        }
+                      />
+                    )}
+                    {selectedApp.companyProfile && (
+                      <ImageDocumentCard
+                        label="Company Profile"
+                        imagePath={selectedApp.companyProfile}
                         onView={() =>
-                          openImageModal(selectedApp.passportPhotos)
+                          openImageModal(selectedApp.companyProfile)
                         }
                         onDownload={() =>
-                          downloadDocument(selectedApp.passportPhotos)
+                          downloadDocument(selectedApp.companyProfile)
                         }
                       />
                     )}
-                    {selectedApp.minutesOfFormation && (
+                    {selectedApp.professionalCertificate && (
                       <ImageDocumentCard
-                        label="Minutes of Formation"
-                        imagePath={selectedApp.minutesOfFormation}
+                        label="Professional Certificate"
+                        imagePath={selectedApp.professionalCertificate}
                         onView={() =>
-                          openImageModal(selectedApp.minutesOfFormation)
+                          openImageModal(selectedApp.professionalCertificate)
                         }
                         onDownload={() =>
-                          downloadDocument(selectedApp.minutesOfFormation)
+                          downloadDocument(selectedApp.professionalCertificate)
                         }
                       />
                     )}
-                    {selectedApp.membersList && (
-                      <ImageDocumentCard
-                        label="Members List"
-                        imagePath={selectedApp.membersList}
-                        onView={() => openImageModal(selectedApp.membersList)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.membersList)
-                        }
-                      />
-                    )}
-                    {selectedApp.businessPlan && (
-                      <ImageDocumentCard
-                        label="Business Plan"
-                        imagePath={selectedApp.businessPlan}
-                        onView={() => openImageModal(selectedApp.businessPlan)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.businessPlan)
-                        }
-                      />
-                    )}
-                    {selectedApp.financialStatement && (
-                      <ImageDocumentCard
-                        label="Financial Statement"
-                        imagePath={selectedApp.financialStatement}
-                        onView={() =>
-                          openImageModal(selectedApp.financialStatement)
-                        }
-                        onDownload={() =>
-                          downloadDocument(selectedApp.financialStatement)
-                        }
-                      />
-                    )}
-                    {selectedApp.taxClearance && (
-                      <ImageDocumentCard
-                        label="Tax Clearance"
-                        imagePath={selectedApp.taxClearance}
-                        onView={() => openImageModal(selectedApp.taxClearance)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.taxClearance)
-                        }
-                      />
-                    )}
-                    {selectedApp.previousRegistration && (
-                      <ImageDocumentCard
-                        label="Previous Registration"
-                        imagePath={selectedApp.previousRegistration}
-                        onView={() =>
-                          openImageModal(selectedApp.previousRegistration)
-                        }
-                        onDownload={() =>
-                          downloadDocument(selectedApp.previousRegistration)
-                        }
-                      />
-                    )}
-                    {!selectedApp.constitution &&
-                      !selectedApp.utilityBill &&
-                      !selectedApp.cacCertificate &&
-                      !selectedApp.affidavit &&
-                      !selectedApp.passportPhotos &&
-                      !selectedApp.minutesOfFormation &&
-                      !selectedApp.membersList &&
-                      !selectedApp.businessPlan &&
-                      !selectedApp.financialStatement &&
-                      !selectedApp.taxClearance &&
-                      !selectedApp.previousRegistration && (
+                    {!selectedApp.certificateOfIncorporation &&
+                      !selectedApp.memart &&
+                      !selectedApp.cacForm1_1 &&
+                      !selectedApp.tinPrintout &&
+                      !selectedApp.companyProfile &&
+                      !selectedApp.professionalCertificate && (
                         <div className="flex items-center gap-2 text-slate-500 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 col-span-full">
                           <Info className="w-4 h-4" />
                           <span className="text-sm font-medium">
@@ -980,7 +1049,10 @@ export default function AdminscumlApplications() {
                       ) : (
                         <>
                           <CheckCircle2 className="w-5 h-5" />
-                          Update Application
+                          {statusUpdate === "approved" &&
+                          selectedApp.status !== "approved"
+                            ? "Approve & Set Price"
+                            : "Update Application"}
                         </>
                       )}
                     </button>
@@ -1118,7 +1190,6 @@ function ArrayInfoItem({ label, value }) {
 
 function ImageDocumentCard({ label, imagePath, onView, onDownload }) {
   const imageUrl = `${IMAGE_URL}${imagePath}`;
-  console.log(imageUrl);
 
   return (
     <div className="bg-white rounded-xl border-2 border-slate-200 overflow-hidden hover:border-blue-300 hover:shadow-lg transition-all group">

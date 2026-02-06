@@ -49,6 +49,12 @@ export default function AdminCacApplications() {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
 
+  // Price modal states
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [priceValue, setPriceValue] = useState("");
+  const [settingPrice, setSettingPrice] = useState(false);
+  const [pendingApprovalApp, setPendingApprovalApp] = useState(null);
+
   const token = localStorage.getItem("token");
 
   useEffect(() => {
@@ -63,7 +69,6 @@ export default function AdminCacApplications() {
         console.log(data);
         if (data.success) {
           setApplications(data.applications);
-
           setPages(data.pages);
         } else {
           toast.error(data.message || "Failed to fetch CAC applications");
@@ -116,7 +121,76 @@ export default function AdminCacApplications() {
 
   const closeModal = () => setSelectedApp(null);
 
+  const openPriceModal = (app) => {
+    setPendingApprovalApp(app);
+    setPriceValue(app.price || "");
+    setShowPriceModal(true);
+  };
+
+  const closePriceModal = () => {
+    setShowPriceModal(false);
+    setPriceValue("");
+    setPendingApprovalApp(null);
+  };
+
+  const submitPrice = async () => {
+    if (!priceValue || isNaN(priceValue) || Number(priceValue) <= 0) {
+      return toast.error("Please enter a valid price");
+    }
+
+    setSettingPrice(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/admin/cac-applications/${pendingApprovalApp.id}/update`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            status: "approved",
+            adminFeedback: feedbackUpdate,
+            price: Number(priceValue)
+          })
+        }
+      );
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Application approved with price successfully");
+        setApplications((prev) =>
+          prev.map((app) =>
+            app.id === pendingApprovalApp.id
+              ? {
+                  ...app,
+                  status: "approved",
+                  adminFeedback: feedbackUpdate,
+                  price: Number(priceValue)
+                }
+              : app
+          )
+        );
+        closePriceModal();
+        closeModal();
+      } else {
+        toast.error(data.message || "Failed to approve application");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to approve application");
+    } finally {
+      setSettingPrice(false);
+    }
+  };
+
   const updateApplication = async () => {
+    // If status is being changed to approved, show price modal
+    if (statusUpdate === "approved" && selectedApp.status !== "approved") {
+      openPriceModal(selectedApp);
+      return;
+    }
+
+    // For non-approval updates, proceed normally
     setUpdating(true);
     try {
       const res = await fetch(
@@ -198,7 +272,7 @@ export default function AdminCacApplications() {
   };
 
   const filteredApplications = applications.filter((app) => {
-    const matchesSearch = app.businessName
+    const matchesSearch = app.companyName
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === "all" || app.status === filterStatus;
@@ -309,7 +383,7 @@ export default function AdminCacApplications() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
               <input
                 type="text"
-                placeholder="Search by business name..."
+                placeholder="Search by company name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400 outline-none transition-all bg-slate-50 focus:bg-white"
@@ -376,13 +450,13 @@ export default function AdminCacApplications() {
                             <Briefcase className="w-5 h-5 text-blue-600" />
                           </div>
                           <h3 className="font-bold text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors text-lg">
-                            {app.businessName}
+                            {app.companyName}
                           </h3>
                         </div>
-                        {app.businessType && (
+                        {app.companyType && (
                           <p className="text-sm text-slate-500 font-medium ml-12 flex items-center gap-1">
                             <BriefcaseIcon className="w-3.5 h-3.5" />
-                            {app.businessType}
+                            {app.companyType}
                           </p>
                         )}
                       </div>
@@ -399,11 +473,24 @@ export default function AdminCacApplications() {
                         <StatusIcon className="w-4 h-4" />
                         {statusConfig.label}
                       </div>
+                      {/* Add isPaid badge here */}
+                      {app.isPaid && (
+                        <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border bg-green-50 border-green-200 text-green-700 text-sm font-semibold shadow-sm ml-2">
+                          <CheckCircle2 className="w-4 h-4" />
+                          Paid
+                        </div>
+                      )}
+                      {!app.isPaid && app.status === "approved" && (
+                        <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border bg-orange-50 border-orange-200 text-orange-700 text-sm font-semibold shadow-sm ml-2">
+                          <Clock className="w-4 h-4" />
+                          Pending Payment
+                        </div>
+                      )}
                     </div>
 
                     {/* Quick Info */}
                     <div className="space-y-3 mb-5">
-                      {app.rcNumber && (
+                      {app.firmBnRcNo && (
                         <div className="flex items-center gap-2.5 text-sm group/item">
                           <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
                             <Hash className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
@@ -412,33 +499,46 @@ export default function AdminCacApplications() {
                             RC Number:
                           </span>
                           <span className="text-slate-800 font-semibold">
-                            {app.rcNumber}
+                            {app.firmBnRcNo}
                           </span>
                         </div>
                       )}
-                      {app.dateOfCommencement && (
+                      {app.emailAddress && (
                         <div className="flex items-center gap-2.5 text-sm group/item">
                           <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
-                            <Calendar className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
+                            <User className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
                           </div>
                           <span className="text-slate-500 font-medium">
-                            Started:
+                            Email:
                           </span>
-                          <span className="text-slate-800 font-semibold">
-                            {app.dateOfCommencement}
+                          <span className="text-slate-800 font-semibold truncate">
+                            {app.emailAddress}
                           </span>
                         </div>
                       )}
-                      {app.industry && (
+                      {app.numberOfShares && (
                         <div className="flex items-center gap-2.5 text-sm group/item">
                           <div className="p-1.5 bg-slate-100 rounded-lg group-hover/item:bg-blue-50 transition-colors">
                             <TrendingUp className="w-3.5 h-3.5 text-slate-500 group-hover/item:text-blue-600 transition-colors" />
                           </div>
                           <span className="text-slate-500 font-medium">
-                            Industry:
+                            Shares:
                           </span>
                           <span className="text-slate-800 font-semibold">
-                            {app.industry}
+                            {app.numberOfShares.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {app.price && app.status === "approved" && (
+                        <div className="flex items-center gap-2.5 text-sm group/item">
+                          <div className="p-1.5 bg-emerald-100 rounded-lg group-hover/item:bg-emerald-200 transition-colors">
+                            <DollarSign className="w-3.5 h-3.5 text-emerald-600 group-hover/item:text-emerald-700 transition-colors" />
+                          </div>
+                          <span className="text-slate-500 font-medium">
+                            Price:
+                          </span>
+                          <span className="text-emerald-700 font-bold">
+                            ₦{Number(app.price).toLocaleString()}
                           </span>
                         </div>
                       )}
@@ -482,7 +582,119 @@ export default function AdminCacApplications() {
           </div>
         )}
 
-        {/* MODAL */}
+        {/* PRICE MODAL */}
+        {showPriceModal && pendingApprovalApp && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-center z-[70] p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl relative animate-in slide-in-from-bottom-8 duration-300">
+              {/* Price Modal Header */}
+              <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white p-6 rounded-t-3xl">
+                <button
+                  onClick={closePriceModal}
+                  className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-xl transition-all group"
+                >
+                  <X className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
+                    <DollarSign className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold">
+                      Set Application Price
+                    </h3>
+                    <p className="text-emerald-100 text-sm mt-1">
+                      {pendingApprovalApp.companyName}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price Modal Content */}
+              <div className="p-6 space-y-5">
+                <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-emerald-100 rounded-lg">
+                      <Info className="w-5 h-5 text-emerald-700" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Approval Confirmation
+                      </p>
+                      <p className="text-xs text-emerald-700 mt-1">
+                        Please set the price for this CAC application before
+                        approving it.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2.5 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4" />
+                    Application Price (₦)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">
+                      ₦
+                    </span>
+                    <input
+                      type="number"
+                      value={priceValue}
+                      onChange={(e) => setPriceValue(e.target.value)}
+                      placeholder="Enter amount"
+                      min="0"
+                      step="1"
+                      className="w-full pl-10 pr-4 py-4 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-400 outline-none transition-all text-lg font-semibold text-slate-800 placeholder:text-slate-400 placeholder:font-normal"
+                    />
+                  </div>
+                  {priceValue &&
+                    !isNaN(priceValue) &&
+                    Number(priceValue) > 0 && (
+                      <p className="mt-2 text-sm text-slate-600 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span className="font-semibold">
+                          ₦{Number(priceValue).toLocaleString()}
+                        </span>
+                      </p>
+                    )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={closePriceModal}
+                    className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all border-2 border-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitPrice}
+                    disabled={
+                      settingPrice ||
+                      !priceValue ||
+                      isNaN(priceValue) ||
+                      Number(priceValue) <= 0
+                    }
+                    className="flex-1 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-400 text-white font-bold rounded-xl shadow-lg hover:shadow-xl disabled:shadow-none transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed"
+                  >
+                    {settingPrice ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Approving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-5 h-5" />
+                        Approve & Set Price
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MAIN APPLICATION MODAL */}
         {selectedApp && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-start pt-8 sm:pt-12 z-50 p-4 overflow-y-auto animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl relative my-8 animate-in slide-in-from-bottom-8 duration-300">
@@ -500,20 +712,27 @@ export default function AdminCacApplications() {
                   </div>
                   <div className="flex-1">
                     <h2 className="text-3xl font-bold mb-2">
-                      {selectedApp.businessName}
+                      {selectedApp.companyName}
                     </h2>
                     <div className="flex flex-wrap gap-3 items-center">
-                      {selectedApp.businessType && (
+                      {selectedApp.companyType && (
                         <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-semibold">
-                          {selectedApp.businessType}
+                          {selectedApp.companyType}
                         </span>
                       )}
-                      {selectedApp.rcNumber && (
+                      {selectedApp.firmBnRcNo && (
                         <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-semibold flex items-center gap-1.5">
                           <Hash className="w-3.5 h-3.5" />
-                          {selectedApp.rcNumber}
+                          {selectedApp.firmBnRcNo}
                         </span>
                       )}
+                      {selectedApp.price &&
+                        selectedApp.status === "approved" && (
+                          <span className="px-3 py-1.5 bg-emerald-500/30 backdrop-blur-sm rounded-lg text-sm font-bold flex items-center gap-1.5">
+                            <DollarSign className="w-3.5 h-3.5" />₦
+                            {Number(selectedApp.price).toLocaleString()}
+                          </span>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -521,57 +740,61 @@ export default function AdminCacApplications() {
 
               {/* Modal Content */}
               <div className="p-8 space-y-6 max-h-[calc(90vh-240px)] overflow-y-auto">
-                {/* Business Information */}
+                {/* Company Information */}
                 <Section
-                  title="Business Information"
+                  title="Company Information"
                   icon={Building2}
                   gradient="from-blue-500 to-indigo-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <InfoItem
                       icon={Briefcase}
-                      label="Business Name"
-                      value={selectedApp.businessName}
-                    />
-                    <InfoItem
-                      icon={FileText}
-                      label="Alternative Name"
-                      value={selectedApp.alternativeBusinessName}
+                      label="Company Name"
+                      value={selectedApp.companyName}
                     />
                     <InfoItem
                       icon={Clipboard}
-                      label="Business Type"
-                      value={selectedApp.businessType}
+                      label="Company Type"
+                      value={selectedApp.companyType}
                     />
                     <InfoItem
                       icon={User}
-                      label="Nature of Business"
-                      value={selectedApp.natureOfBusiness}
-                    />
-                    <InfoItem
-                      icon={BriefcaseIcon}
-                      label="Industry"
-                      value={selectedApp.industry}
-                    />
-                    <InfoItem
-                      icon={Calendar}
-                      label="Commencement Date"
-                      value={selectedApp.dateOfCommencement}
+                      label="Email Address"
+                      value={selectedApp.emailAddress}
                     />
                     <InfoItem
                       icon={Hash}
                       label="RC Number"
-                      value={selectedApp.rcNumber}
+                      value={selectedApp.firmBnRcNo}
                     />
                     <InfoItem
-                      icon={CreditCard}
-                      label="TIN"
-                      value={selectedApp.tin}
+                      icon={TrendingUp}
+                      label="Number of Shares"
+                      value={selectedApp.numberOfShares}
                     />
                     <InfoItem
                       icon={DollarSign}
-                      label="Share Capital"
-                      value={selectedApp.shareCapital}
+                      label="Price Per Share"
+                      value={
+                        selectedApp.pricePerShare
+                          ? `₦${selectedApp.pricePerShare}`
+                          : null
+                      }
+                    />
+                    <InfoItem
+                      icon={DollarSign}
+                      label="Total Share Capital"
+                      value={
+                        selectedApp.totalShareCapital
+                          ? `₦${Number(selectedApp.totalShareCapital).toLocaleString()}`
+                          : null
+                      }
+                    />
+                    <InfoItem
+                      icon={FileText}
+                      label="Share Capital (Words)"
+                      value={selectedApp.shareCapitalInWords}
+                      fullWidth
                     />
                   </div>
                 </Section>
@@ -585,45 +808,100 @@ export default function AdminCacApplications() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <InfoItem
                       icon={Home}
-                      label="Business Address"
-                      value={selectedApp.businessAddress}
+                      label="Head Office Address"
+                      value={selectedApp.headOfficeAddress}
                       fullWidth
                     />
                     <InfoItem
                       icon={Home}
-                      label="Branch Address"
-                      value={selectedApp.branchAddress}
+                      label="Registered Office Address"
+                      value={selectedApp.registeredOfficeAddress}
                       fullWidth
                     />
                   </div>
                 </Section>
 
-                {/* People Information */}
+                {/* Secretary Information */}
                 <Section
-                  title="Personnel Details"
+                  title="Company Secretary Details"
                   icon={Users}
                   gradient="from-teal-500 to-cyan-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <ArrayInfoItem
-                      label="Proprietors"
-                      value={parseArray(selectedApp.proprietors)}
+                    <InfoItem
+                      icon={User}
+                      label="Secretary Type"
+                      value={selectedApp.secretaryType}
                     />
+                    <InfoItem
+                      icon={User}
+                      label="Secretary Name"
+                      value={selectedApp.secretaryName}
+                    />
+                    <InfoItem
+                      icon={User}
+                      label="Secretary Email"
+                      value={selectedApp.secretaryEmail}
+                    />
+                    <InfoItem
+                      icon={User}
+                      label="Secretary Phone"
+                      value={selectedApp.secretaryPhone}
+                    />
+                    <InfoItem
+                      icon={Home}
+                      label="Secretary Address"
+                      value={selectedApp.secretaryAddress}
+                      fullWidth
+                    />
+                    {selectedApp.secretaryType === "firm" && (
+                      <>
+                        <InfoItem
+                          icon={Briefcase}
+                          label="Firm Name"
+                          value={selectedApp.firmName}
+                        />
+                        <InfoItem
+                          icon={User}
+                          label="Firm Email"
+                          value={selectedApp.firmEmail}
+                        />
+                        <InfoItem
+                          icon={User}
+                          label="Firm Phone"
+                          value={selectedApp.firmPhone}
+                        />
+                        <InfoItem
+                          icon={Hash}
+                          label="Firm RC Number"
+                          value={selectedApp.firmBnRcNo}
+                        />
+                        <InfoItem
+                          icon={Home}
+                          label="Firm Registered Address"
+                          value={selectedApp.firmRegisteredAddress}
+                          fullWidth
+                        />
+                      </>
+                    )}
+                  </div>
+                </Section>
+
+                {/* Directors Information */}
+                <Section
+                  title="Directors"
+                  icon={Users}
+                  gradient="from-indigo-500 to-purple-500"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <ArrayInfoItem
                       label="Directors"
                       value={parseArray(selectedApp.directors)}
                     />
-                    <ArrayInfoItem
-                      label="Shareholders"
-                      value={parseArray(selectedApp.shareholders)}
-                    />
-                    <ArrayInfoItem
-                      label="Trustees"
-                      value={parseArray(selectedApp.trustees)}
-                    />
-                    <ArrayInfoItem
-                      label="PSC"
-                      value={parseArray(selectedApp.psc)}
+                    <InfoItem
+                      icon={User}
+                      label="Director Name & Tel"
+                      value={selectedApp.directorNameAndTel}
                     />
                   </div>
                 </Section>
@@ -635,142 +913,46 @@ export default function AdminCacApplications() {
                   gradient="from-orange-500 to-red-500"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {selectedApp.utilityBill && (
+                    {selectedApp.directorSignature && (
                       <ImageDocumentCard
-                        label="Utility Bill"
-                        imagePath={selectedApp.utilityBill}
-                        onView={() => openImageModal(selectedApp.utilityBill)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.utilityBill)
-                        }
-                      />
-                    )}
-                    {selectedApp.cacReceipt && (
-                      <ImageDocumentCard
-                        label="CAC Receipt"
-                        imagePath={selectedApp.cacReceipt}
-                        onView={() => openImageModal(selectedApp.cacReceipt)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.cacReceipt)
-                        }
-                      />
-                    )}
-                    {selectedApp.cacForm && (
-                      <ImageDocumentCard
-                        label="CAC Form"
-                        imagePath={selectedApp.cacForm}
-                        onView={() => openImageModal(selectedApp.cacForm)}
-                        onDownload={() => downloadDocument(selectedApp.cacForm)}
-                      />
-                    )}
-                    {selectedApp.passportPhoto && (
-                      <ImageDocumentCard
-                        label="Passport Photo"
-                        imagePath={selectedApp.passportPhoto}
-                        onView={() => openImageModal(selectedApp.passportPhoto)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.passportPhoto)
-                        }
-                      />
-                    )}
-                    {selectedApp.ninSlip && (
-                      <ImageDocumentCard
-                        label="NIN Slip"
-                        imagePath={selectedApp.ninSlip}
-                        onView={() => openImageModal(selectedApp.ninSlip)}
-                        onDownload={() => downloadDocument(selectedApp.ninSlip)}
-                      />
-                    )}
-                    {selectedApp.signatureImage && (
-                      <ImageDocumentCard
-                        label="Signature"
-                        imagePath={selectedApp.signatureImage}
+                        label="Director Signature"
+                        imagePath={selectedApp.directorSignature}
                         onView={() =>
-                          openImageModal(selectedApp.signatureImage)
+                          openImageModal(selectedApp.directorSignature)
                         }
                         onDownload={() =>
-                          downloadDocument(selectedApp.signatureImage)
+                          downloadDocument(selectedApp.directorSignature)
                         }
                       />
                     )}
-                    {selectedApp.constitution && (
+                    {selectedApp.secretarySignature && (
                       <ImageDocumentCard
-                        label="Constitution"
-                        imagePath={selectedApp.constitution}
-                        onView={() => openImageModal(selectedApp.constitution)}
-                        onDownload={() =>
-                          downloadDocument(selectedApp.constitution)
-                        }
-                      />
-                    )}
-                    {selectedApp.memart && (
-                      <ImageDocumentCard
-                        label="MEMART"
-                        imagePath={selectedApp.memart}
-                        onView={() => openImageModal(selectedApp.memart)}
-                        onDownload={() => downloadDocument(selectedApp.memart)}
-                      />
-                    )}
-                    {selectedApp.declarationForms && (
-                      <ImageDocumentCard
-                        label="Declaration Forms"
-                        imagePath={selectedApp.declarationForms}
+                        label="Secretary Signature"
+                        imagePath={selectedApp.secretarySignature}
                         onView={() =>
-                          openImageModal(selectedApp.declarationForms)
+                          openImageModal(selectedApp.secretarySignature)
                         }
                         onDownload={() =>
-                          downloadDocument(selectedApp.declarationForms)
+                          downloadDocument(selectedApp.secretarySignature)
                         }
                       />
                     )}
-                    {selectedApp.minutesOfMeeting && (
-                      <ImageDocumentCard
-                        label="Minutes of Meeting"
-                        imagePath={selectedApp.minutesOfMeeting}
-                        onView={() =>
-                          openImageModal(selectedApp.minutesOfMeeting)
-                        }
-                        onDownload={() =>
-                          downloadDocument(selectedApp.minutesOfMeeting)
-                        }
-                      />
-                    )}
-                    {selectedApp.newspaperPublication && (
-                      <ImageDocumentCard
-                        label="Newspaper Publication"
-                        imagePath={selectedApp.newspaperPublication}
-                        onView={() =>
-                          openImageModal(selectedApp.newspaperPublication)
-                        }
-                        onDownload={() =>
-                          downloadDocument(selectedApp.newspaperPublication)
-                        }
-                      />
-                    )}
-                    {selectedApp.firsStampDutyReceipt && (
-                      <ImageDocumentCard
-                        label="FIRS Stamp Duty Receipt"
-                        imagePath={selectedApp.firsStampDutyReceipt}
-                        onView={() =>
-                          openImageModal(selectedApp.firsStampDutyReceipt)
-                        }
-                        onDownload={() =>
-                          downloadDocument(selectedApp.firsStampDutyReceipt)
-                        }
-                      />
-                    )}
-                    {!selectedApp.utilityBill &&
-                      !selectedApp.cacReceipt &&
-                      !selectedApp.cacForm &&
-                      !selectedApp.passportPhoto &&
-                      !selectedApp.ninSlip &&
-                      !selectedApp.signatureImage &&
-                      !selectedApp.constitution &&
-                      !selectedApp.memart &&
-                      !selectedApp.declarationForms &&
-                      !selectedApp.minutesOfMeeting &&
-                      !selectedApp.newspaperPublication &&
-                      !selectedApp.firsStampDutyReceipt && (
+                    {selectedApp.secretaryType === "firm" &&
+                      selectedApp.firmSecretarySeal && (
+                        <ImageDocumentCard
+                          label="Firm Secretary Seal"
+                          imagePath={selectedApp.firmSecretarySeal}
+                          onView={() =>
+                            openImageModal(selectedApp.firmSecretarySeal)
+                          }
+                          onDownload={() =>
+                            downloadDocument(selectedApp.firmSecretarySeal)
+                          }
+                        />
+                      )}
+                    {!selectedApp.directorSignature &&
+                      !selectedApp.secretarySignature &&
+                      !selectedApp.firmSecretarySeal && (
                         <div className="flex items-center gap-2 text-slate-500 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 col-span-full">
                           <Info className="w-4 h-4" />
                           <span className="text-sm font-medium">
@@ -833,7 +1015,10 @@ export default function AdminCacApplications() {
                       ) : (
                         <>
                           <CheckCircle2 className="w-5 h-5" />
-                          Update Application
+                          {statusUpdate === "approved" &&
+                          selectedApp.status !== "approved"
+                            ? "Approve & Set Price"
+                            : "Update Application"}
                         </>
                       )}
                     </button>
@@ -939,6 +1124,32 @@ function InfoItem({ icon: Icon, label, value, fullWidth = false }) {
 }
 
 function ArrayInfoItem({ label, value }) {
+  if (!value || value.length === 0) {
+    return (
+      <div className="bg-white rounded-xl p-4 border border-slate-200 hover:border-blue-300 transition-all shadow-sm hover:shadow">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-slate-100 rounded-lg">
+            <Users className="w-4 h-4 text-slate-500 flex-shrink-0" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+              {label}
+            </p>
+            <span className="text-sm text-slate-400 italic">Not provided</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If value is array of objects (like directors), display their names
+  const displayValues = value.map((item) => {
+    if (typeof item === "object" && item !== null) {
+      return item.fullName || item.name || JSON.stringify(item);
+    }
+    return item;
+  });
+
   return (
     <div className="bg-white rounded-xl p-4 border border-slate-200 hover:border-blue-300 transition-all shadow-sm hover:shadow">
       <div className="flex items-start gap-3">
@@ -949,20 +1160,16 @@ function ArrayInfoItem({ label, value }) {
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
             {label}
           </p>
-          {value ? (
-            <div className="flex flex-wrap gap-2">
-              {value.map((item, idx) => (
-                <span
-                  key={idx}
-                  className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 shadow-sm"
-                >
-                  {item}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <span className="text-sm text-slate-400 italic">Not provided</span>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {displayValues.map((item, idx) => (
+              <span
+                key={idx}
+                className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 shadow-sm"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -971,7 +1178,6 @@ function ArrayInfoItem({ label, value }) {
 
 function ImageDocumentCard({ label, imagePath, onView, onDownload }) {
   const imageUrl = `${IMAGE_URL}${imagePath}`;
-  console.log(imageUrl);
   return (
     <div className="bg-white rounded-xl border-2 border-slate-200 overflow-hidden hover:border-blue-300 hover:shadow-lg transition-all group">
       <div

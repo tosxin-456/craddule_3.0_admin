@@ -15,6 +15,7 @@ import AdminCompliance from "./pages/compliance";
 import AdminCacApplications from "./pages/cac applications";
 import AdminFirsApplications from "./pages/firs applications";
 import AdminSculmApplications from "./pages/sculm applications";
+import AdminUserDetails from "./pages/user details";
 // import DashboardHome from "./pages/Dashboard";
 // import FounderProfile from "./pages/founder profile";
 // import FounderSettings from "./pages/settings";
@@ -61,6 +62,7 @@ function App() {
           <Route path="cac" element={<AdminCacApplications />} />
           <Route path="firs" element={<AdminFirsApplications />} />
           <Route path="sculm" element={<AdminSculmApplications />} />
+          <Route path="users/:userId" element={<AdminUserDetails />} />
         </Route>
 
         {/* ================= FALLBACK ================= */}

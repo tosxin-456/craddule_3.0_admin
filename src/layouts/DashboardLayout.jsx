@@ -162,30 +162,6 @@ export default function AdminConsoleLayout() {
           <div className="w-10" />
         </header>
 
-        {/* Dashboard Buttons */}
-        <div className="p-6 space-y-4 bg-blue-50/50 border-b border-blue-100 flex flex-col md:flex-row md:space-x-4 md:space-y-0">
-          <button
-            onClick={() => navigate("/admin/cac")}
-            className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg"
-          >
-            View CAC Applications
-          </button>
-
-          <button
-            onClick={() => navigate("/admin/firs")}
-            className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-amber-700 transition-all duration-200 shadow-md hover:shadow-lg"
-          >
-            View FIRS Applications
-          </button>
-
-          <button
-            onClick={() => navigate("/admin/sculm")}
-            className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl font-semibold hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg"
-          >
-            View SCUML Applications
-          </button>
-        </div>
-
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
           <Outlet />

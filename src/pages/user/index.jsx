@@ -8,6 +8,9 @@ export default function AdminUsers() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const USERS_PER_PAGE = 10;
 
   const token = localStorage.getItem("token");
   const navigate = useNavigate();
@@ -16,15 +19,20 @@ export default function AdminUsers() {
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus]);
+
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE_URL}/admin/users`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+
       if (!res.ok) throw new Error("Failed to fetch users");
+
       const data = await res.json();
-      console.log(data)
       setUsers(data);
       setError(null);
     } catch (err) {
@@ -34,6 +42,7 @@ export default function AdminUsers() {
     }
   };
 
+  // Filter users
   const filteredUsers = users.filter(
     (u) =>
       (u.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -41,6 +50,12 @@ export default function AdminUsers() {
         u.startupName?.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterStatus === "all" || u.onboardingStatus === filterStatus)
   );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
+  const indexOfLastUser = currentPage * USERS_PER_PAGE;
+  const indexOfFirstUser = indexOfLastUser - USERS_PER_PAGE;
+  const currentUsers = filteredUsers.slice(indexOfFirstUser, indexOfLastUser);
 
   if (loading)
     return (
@@ -90,7 +105,7 @@ export default function AdminUsers() {
         </div>
 
         {/* Users Table */}
-        {filteredUsers.length === 0 ? (
+        {currentUsers.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <p className="text-gray-500 text-lg">No users found</p>
           </div>
@@ -99,54 +114,44 @@ export default function AdminUsers() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    #
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Email
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Sector
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Startup Name
                   </th>
-                  {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th> */}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Actions
                   </th>
                 </tr>
               </thead>
+
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredUsers.map((user) => (
+                {currentUsers.map((user, index) => (
                   <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {user.fullName}
-                      </div>
-                      {/* <div className="text-sm text-gray-500">
-                        {user.phoneNumber}
-                      </div> */}
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {indexOfFirstUser + index + 1}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{user.email}</div>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                      {user.fullName}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold">
-                        {user.sector}
-                      </span>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {user.email}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {user.startupName}
-                      </div>
+                    <td className="px-6 py-4 text-sm">{user.sector}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {user.startupName}
                     </td>
-                    {/* <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge status={user.onboardingStatus} />
-                    </td> */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-6 py-4 text-sm font-medium">
                       <button
                         onClick={() => navigate(`/admin/users/${user.id}`)}
                         className="text-blue-600 hover:text-blue-900"
@@ -161,39 +166,48 @@ export default function AdminUsers() {
           </div>
         )}
 
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-center mt-6 gap-2 flex-wrap">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 border rounded disabled:opacity-50"
+            >
+              Previous
+            </button>
+
+            {[...Array(totalPages)].map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentPage(i + 1)}
+                className={`px-3 py-1 border rounded ${
+                  currentPage === i + 1 ? "bg-blue-600 text-white" : "bg-white"
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+
+            <button
+              onClick={() =>
+                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+              }
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 border rounded disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        )}
+
         {/* Results Count */}
         <div className="mt-4 text-sm text-gray-600">
-          Showing {filteredUsers.length} of {users.length} users
+          Showing {filteredUsers.length === 0 ? 0 : indexOfFirstUser + 1}–
+          {Math.min(indexOfLastUser, filteredUsers.length)} of{" "}
+          {filteredUsers.length} users
         </div>
       </div>
     </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  const statusStyles = {
-    not_started: "bg-gray-100 text-gray-800",
-    in_progress: "bg-blue-100 text-blue-800",
-    submitted: "bg-yellow-100 text-yellow-800",
-    approved: "bg-green-100 text-green-800",
-    needs_correction: "bg-red-100 text-red-800"
-  };
-
-  const statusLabels = {
-    not_started: "Not Started",
-    in_progress: "In Progress",
-    submitted: "Submitted",
-    approved: "Approved",
-    needs_correction: "Needs Correction"
-  };
-
-  return (
-    <span
-      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-        statusStyles[status] || "bg-gray-100 text-gray-800"
-      }`}
-    >
-      {statusLabels[status] || status}
-    </span>
   );
 }

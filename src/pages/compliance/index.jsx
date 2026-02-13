@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   ShieldAlert,
   CheckCircle,
@@ -17,7 +17,11 @@ import {
   Activity,
   Plus,
   X,
-  UserPlus
+  UserPlus,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react";
 import { API_BASE_URL, IMAGE_URL } from "../../config/apiConfig";
 import toast from "react-hot-toast";
@@ -41,6 +45,132 @@ const BUSINESS_SECTORS = [
   "Other"
 ];
 
+const ITEMS_PER_PAGE_OPTIONS = [5, 10, 20, 50];
+
+// ── Pagination component ──────────────────────────────────────────────────────
+function Pagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  pageSize,
+  onPageChange,
+  onPageSizeChange
+}) {
+  const pages = useMemo(() => {
+    const range = [];
+    const delta = 2;
+    const left = Math.max(2, currentPage - delta);
+    const right = Math.min(totalPages - 1, currentPage + delta);
+
+    range.push(1);
+    if (left > 2) range.push("...");
+    for (let i = left; i <= right; i++) range.push(i);
+    if (right < totalPages - 1) range.push("...");
+    if (totalPages > 1) range.push(totalPages);
+
+    return range;
+  }, [currentPage, totalPages]);
+
+  if (totalPages <= 1 && totalItems <= ITEMS_PER_PAGE_OPTIONS[0]) return null;
+
+  const start = (currentPage - 1) * pageSize + 1;
+  const end = Math.min(currentPage * pageSize, totalItems);
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4 border-t border-gray-200 mt-2">
+      {/* Count + page-size picker */}
+      <div className="flex items-center gap-3 text-sm text-gray-500">
+        <span>
+          Showing{" "}
+          <span className="font-semibold text-gray-800">
+            {start}–{end}
+          </span>{" "}
+          of <span className="font-semibold text-gray-800">{totalItems}</span>{" "}
+          users
+        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-gray-400">|</span>
+          <span>Per page:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white cursor-pointer"
+          >
+            {ITEMS_PER_PAGE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Page buttons */}
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(1)}
+          disabled={currentPage === 1}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="First page"
+        >
+          <ChevronsLeft className="w-4 h-4" />
+        </button>
+
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="Previous page"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+
+        {pages.map((page, idx) =>
+          page === "..." ? (
+            <span
+              key={`ellipsis-${idx}`}
+              className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm select-none"
+            >
+              ···
+            </span>
+          ) : (
+            <button
+              key={page}
+              onClick={() => onPageChange(page)}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition-all ${
+                currentPage === page
+                  ? "bg-red-600 text-white shadow-md shadow-red-200 scale-105"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {page}
+            </button>
+          )
+        )}
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="Next page"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+
+        <button
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage === totalPages}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="Last page"
+        >
+          <ChevronsRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 export default function AdminCompliance() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +187,11 @@ export default function AdminCompliance() {
   const [completionPrice, setCompletionPrice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedUserForModal, setSelectedUserForModal] = useState(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   const [newCompliance, setNewCompliance] = useState({
     userId: "",
     title: "",
@@ -74,31 +209,31 @@ export default function AdminCompliance() {
     fetchUsers();
   }, []);
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, sectorFilter]);
+
   async function fetchCompliance() {
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE_URL}/admin/compliances`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
-
       if (!res.ok) throw new Error("Failed to fetch compliance items");
-
       const data = await res.json();
       setItems(data);
-      console.log(data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }
+
   async function fetchUsers() {
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch(`${API_BASE_URL}/admin/users`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       const data = await res.json();
       setUsers(data);
@@ -122,7 +257,6 @@ export default function AdminCompliance() {
       toast.error("Please enter a valid price (0 or greater)");
       return;
     }
-
     try {
       setIsSubmitting(true);
       const res = await fetch(
@@ -136,9 +270,7 @@ export default function AdminCompliance() {
           body: JSON.stringify({ price: Number(completionPrice) })
         }
       );
-
       if (!res.ok) throw new Error("Failed to resolve item");
-
       toast.success("Compliance item marked as completed");
       setShowCostModal(false);
       setSelectedItemForCost(null);
@@ -161,24 +293,18 @@ export default function AdminCompliance() {
       toast.error("Please fill in all required fields");
       return;
     }
-
     try {
       setIsSubmitting(true);
-      const token = localStorage.getItem("token");
-
       const res = await fetch(`${API_BASE_URL}/admin/compliances`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify(newCompliance)
       });
-
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.message || "Failed to add compliance");
-
       toast.success(data.message);
       setShowAddModal(false);
       setNewCompliance({
@@ -188,7 +314,6 @@ export default function AdminCompliance() {
         cost: "",
         status: "Pending"
       });
-
       fetchCompliance();
     } catch (err) {
       toast.error(err.message);
@@ -197,43 +322,17 @@ export default function AdminCompliance() {
     }
   }
 
-  async function handleRemoveCompliance(id) {
+  async function handleRemove(id) {
     if (!confirm("Remove this compliance item permanently?")) return;
-
     try {
-      const token = localStorage.getItem("token");
-
       const res = await fetch(`${API_BASE_URL}/admin/compliances/${id}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
-
       const data = await res.json();
       if (!res.ok)
         throw new Error(data.message || "Failed to remove compliance");
-
-      toast.success(data.message);
-      fetchCompliance();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }
-
-  async function handleRemove(id) {
-    if (!confirm("Remove this compliance item permanently?")) return;
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/compliances/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!res.ok) throw new Error("Failed to remove item");
-
+      toast.success(data.message || "Removed successfully");
       fetchCompliance();
     } catch (err) {
       toast.error(err.message);
@@ -254,15 +353,77 @@ export default function AdminCompliance() {
     setShowAddModal(true);
   }
 
-  const complianceByUser = items.reduce((acc, item) => {
-    const userKey = item.User
-      ? `${item.User.id}|${item.User.fullName} (${item.User.email})`
-      : "unknown|Unknown User";
+  // ── Derived data ─────────────────────────────────────────────────────────────
+  const complianceByUser = useMemo(
+    () =>
+      items.reduce((acc, item) => {
+        const userKey = item.User
+          ? `${item.User.id}|${item.User.fullName} (${item.User.email})`
+          : "unknown|Unknown User";
+        if (!acc[userKey]) acc[userKey] = [];
+        acc[userKey].push(item);
+        return acc;
+      }, {}),
+    [items]
+  );
 
-    if (!acc[userKey]) acc[userKey] = [];
-    acc[userKey].push(item);
-    return acc;
-  }, {});
+  const filteredUserGroups = useMemo(
+    () =>
+      Object.entries(complianceByUser).filter(([userKey, userItems]) => {
+        const userLabel = userKey.split("|")[1].toLowerCase();
+        const matchesSearch = userLabel.includes(searchQuery.toLowerCase());
+        const userId = parseInt(userKey.split("|")[0]);
+        const user = users.find((u) => u.id === userId);
+        const matchesSector =
+          sectorFilter === "all" || (user && user.sector === sectorFilter);
+        const hasMatchingItems = userItems.some(
+          (item) =>
+            statusFilter === "all" || item.complianceStatus === statusFilter
+        );
+        return matchesSearch && matchesSector && hasMatchingItems;
+      }),
+    [complianceByUser, searchQuery, sectorFilter, statusFilter, users]
+  );
+
+  // Paginated slice
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredUserGroups.length / pageSize)
+  );
+  const paginatedGroups = filteredUserGroups.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
+  const getFilteredItems = (userItems) =>
+    userItems.filter(
+      (item) => statusFilter === "all" || item.complianceStatus === statusFilter
+    );
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setSectorFilter("all");
+  };
+
+  const stats = useMemo(
+    () => ({
+      total: items.length,
+      completed: items.filter((d) => d.complianceStatus === "Completed").length,
+      pending: items.filter(
+        (d) =>
+          d.complianceStatus === "Pending" ||
+          d.complianceStatus === "Not Started"
+      ).length,
+      overdue: items.filter((d) => d.documentStatus === "Expired").length
+    }),
+    [items]
+  );
+
+  const uniqueSectors = useMemo(() => {
+    const sectors = users.map((u) => u.sector).filter(Boolean);
+    return [...new Set(sectors)].sort();
+  }, [users]);
 
   const getStatusBadge = (complianceStatus) => {
     const statusConfig = {
@@ -298,73 +459,16 @@ export default function AdminCompliance() {
   };
 
   const toggleUserExpanded = (userKey) => {
-    setExpandedUsers((prev) => ({
-      ...prev,
-      [userKey]: !prev[userKey]
-    }));
+    setExpandedUsers((prev) => ({ ...prev, [userKey]: !prev[userKey] }));
   };
 
-  const filteredUserGroups = Object.entries(complianceByUser).filter(
-    ([userKey, userItems]) => {
-      const userLabel = userKey.split("|")[1].toLowerCase();
-      const matchesSearch = userLabel.includes(searchQuery.toLowerCase());
-
-      const userId = parseInt(userKey.split("|")[0]);
-      const user = users.find((u) => u.id === userId);
-      const matchesSector =
-        sectorFilter === "all" || (user && user.sector === sectorFilter);
-
-      const hasMatchingItems = userItems.some((item) => {
-        const matchesStatus =
-          statusFilter === "all" || item.complianceStatus === statusFilter;
-        return matchesStatus;
-      });
-
-      return matchesSearch && matchesSector && hasMatchingItems;
-    }
-  );
-
-  const getFilteredItems = (userItems) => {
-    return userItems.filter((item) => {
-      const matchesStatus =
-        statusFilter === "all" || item.complianceStatus === statusFilter;
-      return matchesStatus;
-    });
-  };
-
-  const clearFilters = () => {
-    setSearchQuery("");
-    setStatusFilter("all");
-    setSectorFilter("all");
-  };
-
-  const getTotalStats = () => {
-    return {
-      total: items.length,
-      completed: items.filter((d) => d.complianceStatus === "Completed").length,
-      pending: items.filter(
-        (d) =>
-          d.complianceStatus === "Pending" ||
-          d.complianceStatus === "Not Started"
-      ).length,
-      overdue: items.filter((d) => d.documentStatus === "Expired").length
-    };
-  };
-
-  const getUniqueSectors = () => {
-    const sectors = users.map((u) => u.sector).filter(Boolean);
-    return [...new Set(sectors)].sort();
-  };
-
-  const stats = getTotalStats();
-  const uniqueSectors = getUniqueSectors();
-
+  // ── Loading / error screens ───────────────────────────────────────────────────
   if (loading)
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
         <p className="text-sm text-gray-500 font-medium">
-          Loading compliance items...
+          Loading compliance items…
         </p>
       </div>
     );
@@ -384,10 +488,11 @@ export default function AdminCompliance() {
       </div>
     );
 
+  // ── Main render ───────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header with Stats */}
+        {/* ── Header ─────────────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
           <div className="bg-gradient-to-r from-red-600 via-red-700 to-orange-700 p-6 sm:p-8">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
@@ -422,75 +527,61 @@ export default function AdminCompliance() {
             </div>
           </div>
 
-          {/* Stats Cards */}
+          {/* Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-gray-50">
-            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Total
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {stats.total}
-                  </p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center">
-                  <Activity className="w-6 h-6 text-blue-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Completed
-                  </p>
-                  <p className="text-2xl font-bold text-emerald-600 mt-1">
-                    {stats.completed}
-                  </p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-emerald-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Pending
-                  </p>
-                  <p className="text-2xl font-bold text-amber-600 mt-1">
-                    {stats.pending}
-                  </p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-amber-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Overdue
-                  </p>
-                  <p className="text-2xl font-bold text-red-600 mt-1">
-                    {stats.overdue}
-                  </p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center">
-                  <XCircle className="w-6 h-6 text-red-600" />
+            {[
+              {
+                label: "Total",
+                value: stats.total,
+                color: "blue",
+                Icon: Activity
+              },
+              {
+                label: "Completed",
+                value: stats.completed,
+                color: "emerald",
+                Icon: CheckCircle
+              },
+              {
+                label: "Pending",
+                value: stats.pending,
+                color: "amber",
+                Icon: Clock
+              },
+              {
+                label: "Overdue",
+                value: stats.overdue,
+                color: "red",
+                Icon: XCircle
+              }
+            ].map(({ label, value, color, Icon }) => (
+              <div
+                key={label}
+                className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      {label}
+                    </p>
+                    <p
+                      className={`text-2xl font-bold mt-1 text-${color}-${label === "Total" ? "900" : "600"}`}
+                    >
+                      {value}
+                    </p>
+                  </div>
+                  <div
+                    className={`w-12 h-12 rounded-xl bg-${color}-50 flex items-center justify-center`}
+                  >
+                    <Icon className={`w-6 h-6 text-${color}-600`} />
+                  </div>
                 </div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* Filters */}
+        {/* ── Filters ────────────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
@@ -506,13 +597,12 @@ export default function AdminCompliance() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by user name or email..."
+                placeholder="Search by user name or email…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-shadow"
               />
             </div>
-
             <select
               value={sectorFilter}
               onChange={(e) => setSectorFilter(e.target.value)}
@@ -525,7 +615,6 @@ export default function AdminCompliance() {
                 </option>
               ))}
             </select>
-
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -571,7 +660,7 @@ export default function AdminCompliance() {
           )}
         </div>
 
-        {/* Compliance Items List */}
+        {/* ── Compliance list ─────────────────────────────────────────────────── */}
         {filteredUserGroups.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center">
             <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
@@ -587,142 +676,147 @@ export default function AdminCompliance() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredUserGroups.map(([userKey, userItems]) => {
-              const userLabel = userKey.split("|")[1];
-              const userId = parseInt(userKey.split("|")[0]);
-              const user = users.find((u) => u.id === userId);
-              const filteredItems = getFilteredItems(userItems);
-              const isExpanded = expandedUsers[userKey];
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            {/* Result count header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/60">
+              <p className="text-sm font-medium text-gray-600">
+                <span className="font-bold text-gray-900">
+                  {filteredUserGroups.length}
+                </span>{" "}
+                user{filteredUserGroups.length !== 1 ? "s" : ""} found
+              </p>
+              <p className="text-xs text-gray-400">
+                Page {currentPage} of {totalPages}
+              </p>
+            </div>
 
-              return (
-                <div
-                  key={userKey}
-                  className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-center justify-between p-5 hover:bg-gray-50 transition-colors group">
-                    <button
-                      onClick={() => toggleUserExpanded(userKey)}
-                      className="flex items-center gap-4 flex-1"
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                        {userLabel.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="text-left">
-                        <h2 className="text-lg font-bold text-gray-900 group-hover:text-red-600 transition-colors">
-                          {userLabel}
-                        </h2>
-                        <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
-                          <span>
-                            {filteredItems.length} compliance item
-                            {filteredItems.length !== 1 ? "s" : ""}
-                          </span>
-                          {user && user.sector && (
-                            <>
-                              <span>•</span>
-                              <span className="text-red-600">
-                                {user.sector}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => user && openAddModalForUser(user)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                        Add Compliance
-                      </button>
-                      <div className="hidden sm:flex items-center gap-2">
-                        {filteredItems.some(
-                          (d) => d.complianceStatus === "Completed"
-                        ) && (
-                          <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">
-                            {
-                              filteredItems.filter(
-                                (d) => d.complianceStatus === "Completed"
-                              ).length
-                            }{" "}
-                            Completed
-                          </span>
-                        )}
-                        {filteredItems.some(
-                          (d) =>
-                            d.complianceStatus === "Pending" ||
-                            d.complianceStatus === "Not Started"
-                        ) && (
-                          <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">
-                            {
-                              filteredItems.filter(
-                                (d) =>
-                                  d.complianceStatus === "Pending" ||
-                                  d.complianceStatus === "Not Started"
-                              ).length
-                            }{" "}
-                            Pending
-                          </span>
-                        )}
-                      </div>
+            <div className="divide-y divide-gray-100">
+              {paginatedGroups.map(([userKey, userItems]) => {
+                const userLabel = userKey.split("|")[1];
+                const userId = parseInt(userKey.split("|")[0]);
+                const user = users.find((u) => u.id === userId);
+                const filteredItems = getFilteredItems(userItems);
+                const isExpanded = expandedUsers[userKey];
+                const completedCount = filteredItems.filter(
+                  (d) => d.complianceStatus === "Completed"
+                ).length;
+                const pendingCount = filteredItems.filter(
+                  (d) =>
+                    d.complianceStatus === "Pending" ||
+                    d.complianceStatus === "Not Started"
+                ).length;
+
+                return (
+                  <div
+                    key={userKey}
+                    className="hover:bg-gray-50/40 transition-colors"
+                  >
+                    <div className="flex items-center justify-between px-5 py-4 group">
                       <button
                         onClick={() => toggleUserExpanded(userKey)}
-                        className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-gray-200 flex items-center justify-center transition-colors"
+                        className="flex items-center gap-4 flex-1 min-w-0"
                       >
-                        {isExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-gray-600" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-gray-600" />
-                        )}
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center text-white font-bold text-lg shadow-md flex-shrink-0">
+                          {userLabel.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="text-left min-w-0">
+                          <h2 className="text-base font-bold text-gray-900 group-hover:text-red-600 transition-colors truncate">
+                            {userLabel}
+                          </h2>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 font-medium mt-0.5">
+                            <span>
+                              {filteredItems.length} item
+                              {filteredItems.length !== 1 ? "s" : ""}
+                            </span>
+                            {user?.sector && (
+                              <>
+                                <span>•</span>
+                                <span className="text-red-600 font-semibold">
+                                  {user.sector}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </button>
-                    </div>
-                  </div>
 
-                  {isExpanded && (
-                    <div className="border-t border-gray-100 bg-gray-50 p-5">
-                      <div className="space-y-4">
-                        {filteredItems.map((item) => {
-                          return (
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                        {/* Mini status pills */}
+                        <div className="hidden sm:flex items-center gap-1.5">
+                          {completedCount > 0 && (
+                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">
+                              {completedCount} done
+                            </span>
+                          )}
+                          {pendingCount > 0 && (
+                            <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">
+                              {pendingCount} pending
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => user && openAddModalForUser(user)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all shadow-sm"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Add</span>
+                        </button>
+
+                        <button
+                          onClick={() => toggleUserExpanded(userKey)}
+                          className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-gray-600" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-gray-600" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded items */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 bg-gray-50 px-5 py-4">
+                        <div className="space-y-3">
+                          {filteredItems.map((item) => (
                             <div
                               key={item.id}
                               className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-all hover:border-gray-300"
                             >
-                              <div className="flex flex-col lg:flex-row gap-5">
-                                <div className="rounded-xl p-4 bg-red-50 self-start">
+                              <div className="flex flex-col lg:flex-row gap-4">
+                                <div className="rounded-xl p-3 bg-red-50 self-start flex-shrink-0">
                                   <ShieldAlert className="w-5 h-5 text-red-600" />
                                 </div>
 
-                                <div className="flex-1 min-w-0 w-full space-y-4">
+                                <div className="flex-1 min-w-0 space-y-4">
                                   <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
                                     <div className="min-w-0 flex-1">
-                                      <h3 className="text-lg font-bold text-gray-900 mb-1">
+                                      <h3 className="text-base font-bold text-gray-900 mb-1">
                                         {item.title}
                                       </h3>
-                                      <p className="text-sm text-gray-600 font-medium">
+                                      <p className="text-sm text-gray-600">
                                         {item.description}
                                       </p>
                                     </div>
                                     {getStatusBadge(item.complianceStatus)}
                                   </div>
 
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                      <div className="min-w-0">
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                          Cost
-                                        </p>
-                                        <p className="text-sm text-gray-700 leading-relaxed font-semibold">
-                                          ₦ {item.cost}
-                                        </p>
-                                      </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                        Cost
+                                      </p>
+                                      <p className="text-sm font-bold text-gray-800">
+                                        ₦ {item.cost}
+                                      </p>
                                     </div>
-
                                     <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                      <Activity className="w-5 h-5 text-purple-500 flex-shrink-0 mt-0.5" />
-                                      <div className="min-w-0">
+                                      <Activity className="w-4 h-4 text-purple-500 flex-shrink-0 mt-0.5" />
+                                      <div>
                                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                          Compliance Status
+                                          Status
                                         </p>
                                         <p className="text-sm text-gray-700 font-medium">
                                           {item.complianceStatus || "N/A"}
@@ -732,10 +826,10 @@ export default function AdminCompliance() {
 
                                     {item.documentNumber && (
                                       <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                        <FileText className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                                        <div className="min-w-0">
+                                        <FileText className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                                        <div>
                                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                            Document Number
+                                            Doc Number
                                           </p>
                                           <p className="text-sm text-gray-700 font-mono">
                                             {item.documentNumber}
@@ -746,8 +840,8 @@ export default function AdminCompliance() {
 
                                     {item.issueDate && (
                                       <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                        <Clock className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
-                                        <div className="min-w-0">
+                                        <Clock className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
+                                        <div>
                                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                             Issue Date
                                           </p>
@@ -762,8 +856,8 @@ export default function AdminCompliance() {
 
                                     {item.expiryDate && (
                                       <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                        <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                                        <div className="min-w-0">
+                                        <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                                        <div>
                                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                             Expiry Date
                                           </p>
@@ -778,10 +872,10 @@ export default function AdminCompliance() {
 
                                     {item.fileUrl && (
                                       <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                        <FileText className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                                        <div className="min-w-0 flex-1">
+                                        <FileText className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                                        <div>
                                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                            Attached Document
+                                            Attached Doc
                                           </p>
                                           <a
                                             href={`${IMAGE_URL}${item.fileUrl}`}
@@ -796,7 +890,7 @@ export default function AdminCompliance() {
                                     )}
                                   </div>
 
-                                  <div className="flex flex-wrap gap-2 pt-2">
+                                  <div className="flex flex-wrap gap-2 pt-1">
                                     {item.formData && (
                                       <button
                                         onClick={() =>
@@ -808,18 +902,16 @@ export default function AdminCompliance() {
                                             )
                                           )
                                         }
-                                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md"
+                                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-all shadow-sm"
                                       >
-                                        <Eye className="w-4 h-4" />
-                                        View Details
+                                        <Eye className="w-4 h-4" /> View Details
                                       </button>
                                     )}
-
                                     {item.complianceStatus !== "Completed" && (
                                       <button
                                         disabled={actionLoading === item.id}
                                         onClick={() => openCostModal(item)}
-                                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all disabled:opacity-50 shadow-sm"
                                       >
                                         {actionLoading === item.id ? (
                                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -829,11 +921,10 @@ export default function AdminCompliance() {
                                         Mark Complete
                                       </button>
                                     )}
-
                                     <button
                                       disabled={actionLoading === item.id}
                                       onClick={() => handleRemove(item.id)}
-                                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all disabled:opacity-50 shadow-sm"
                                     >
                                       {actionLoading === item.id ? (
                                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -846,19 +937,37 @@ export default function AdminCompliance() {
                                 </div>
                               </div>
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── Pagination ──────────────────────────────────────────────────── */}
+            <div className="px-6">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredUserGroups.length}
+                pageSize={pageSize}
+                onPageChange={(p) => {
+                  setCurrentPage(p);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                onPageSizeChange={(n) => {
+                  setPageSize(n);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
 
-      {/* Cost Modal for Completing Item */}
+      {/* ── Cost / Complete modal ─────────────────────────────────────────────── */}
       {showCostModal && selectedItemForCost && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
@@ -882,7 +991,6 @@ export default function AdminCompliance() {
                 <X className="w-6 h-6 text-white" />
               </button>
             </div>
-
             <div className="p-6 space-y-5">
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                 <h3 className="font-semibold text-gray-900 mb-1">
@@ -892,7 +1000,6 @@ export default function AdminCompliance() {
                   {selectedItemForCost.description}
                 </p>
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Final Price (₦) *
@@ -914,7 +1021,6 @@ export default function AdminCompliance() {
                 </p>
               </div>
             </div>
-
             <div className="bg-gray-50 border-t border-gray-200 p-6 flex gap-3 rounded-b-2xl">
               <button
                 onClick={() => {
@@ -923,24 +1029,22 @@ export default function AdminCompliance() {
                   setCompletionPrice("");
                 }}
                 disabled={isSubmitting}
-                className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleResolveWithCost}
                 disabled={isSubmitting}
-                className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-700 text-white font-semibold hover:from-emerald-700 hover:to-green-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-700 text-white font-semibold hover:from-emerald-700 hover:to-green-800 transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Completing...
+                    <Loader2 className="w-5 h-5 animate-spin" /> Completing…
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="w-5 h-5" />
-                    Complete
+                    <CheckCircle className="w-5 h-5" /> Complete
                   </>
                 )}
               </button>
@@ -949,11 +1053,11 @@ export default function AdminCompliance() {
         </div>
       )}
 
-      {/* Add Compliance Modal */}
+      {/* ── Add Compliance modal ──────────────────────────────────────────────── */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-red-600 to-orange-700 p-6 flex items-center justify-between">
+            <div className="sticky top-0 bg-gradient-to-r from-red-600 to-orange-700 p-6 flex items-center justify-between rounded-t-2xl">
               <div>
                 <h2 className="text-2xl font-bold text-white mb-1">
                   Add Compliance Item
@@ -1015,7 +1119,7 @@ export default function AdminCompliance() {
                     }
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
                   >
-                    <option value="">Choose a user...</option>
+                    <option value="">Choose a user…</option>
                     {users.map((user) => (
                       <option key={user.id} value={user.id}>
                         {user.fullName} ({user.email})
@@ -1041,7 +1145,7 @@ export default function AdminCompliance() {
                       }
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
                     >
-                      <option value="">Choose a sector...</option>
+                      <option value="">Choose a sector…</option>
                       <option value="all">All Sectors</option>
                       {BUSINESS_SECTORS.map((sector) => (
                         <option key={sector} value={sector.toLowerCase()}>
@@ -1052,23 +1156,32 @@ export default function AdminCompliance() {
                   </div>
                 )}
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Title *
-                </label>
-                <input
-                  type="text"
-                  value={newCompliance.title}
-                  onChange={(e) =>
-                    setNewCompliance({
-                      ...newCompliance,
-                      title: e.target.value
-                    })
-                  }
-                  placeholder="e.g., Annual Tax Filing"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                />
-              </div>
+              {[
+                {
+                  label: "Title",
+                  key: "title",
+                  type: "text",
+                  placeholder: "e.g., Annual Tax Filing"
+                }
+              ].map(({ label, key, type, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    {label} *
+                  </label>
+                  <input
+                    type={type}
+                    value={newCompliance[key]}
+                    placeholder={placeholder}
+                    onChange={(e) =>
+                      setNewCompliance({
+                        ...newCompliance,
+                        [key]: e.target.value
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  />
+                </div>
+              ))}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1082,7 +1195,7 @@ export default function AdminCompliance() {
                       description: e.target.value
                     })
                   }
-                  placeholder="Provide details about this compliance requirement..."
+                  placeholder="Provide details about this compliance requirement…"
                   rows={4}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
                 />
@@ -1095,10 +1208,10 @@ export default function AdminCompliance() {
                 <input
                   type="text"
                   value={newCompliance.cost}
+                  placeholder="e.g., 50000"
                   onChange={(e) =>
                     setNewCompliance({ ...newCompliance, cost: e.target.value })
                   }
-                  placeholder="e.g., 50000"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
               </div>
@@ -1124,31 +1237,29 @@ export default function AdminCompliance() {
               </div>
             </div>
 
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-6 flex gap-3">
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-6 flex gap-3 rounded-b-2xl">
               <button
                 onClick={() => {
                   setShowAddModal(false);
                   setSelectedUserForModal(null);
                 }}
                 disabled={isSubmitting}
-                className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddCompliance}
                 disabled={isSubmitting}
-                className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-red-600 to-orange-700 text-white font-semibold hover:from-red-700 hover:to-orange-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-red-600 to-orange-700 text-white font-semibold hover:from-red-700 hover:to-orange-800 transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Adding...
+                    <Loader2 className="w-5 h-5 animate-spin" /> Adding…
                   </>
                 ) : (
                   <>
-                    <Plus className="w-5 h-5" />
-                    Add Compliance
+                    <Plus className="w-5 h-5" /> Add Compliance
                   </>
                 )}
               </button>

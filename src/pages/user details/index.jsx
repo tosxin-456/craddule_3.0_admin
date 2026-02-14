@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { API_BASE_URL, IMAGE_URL } from "../../config/apiConfig";
+import toast from "react-hot-toast";
 
 export default function AdminUserDetails() {
   const { userId } = useParams();
@@ -56,8 +57,8 @@ export default function AdminUserDetails() {
     { id: "cac", label: "CAC Applications", icon: "🏢" },
     { id: "firs", label: "TIN Applications", icon: "💰" },
     { id: "scuml", label: "SCUML Applications", icon: "📋" },
-    // { id: "compliance", label: "Compliance", icon: "✅" },
-    // { id: "onboarding", label: "Onboarding", icon: "🚀" }
+    { id: "compliance", label: "Compliance", icon: "✅" },
+    { id: "documents", label: "Documents", icon: "📁" }
   ];
 
   return (
@@ -105,10 +106,10 @@ export default function AdminUserDetails() {
             <SCUMLTab applications={user.scumlApplications} token={token} />
           )}
           {activeTab === "compliance" && (
-            <ComplianceTab compliance={user.compliance} />
+            <ComplianceTab compliance={user.compliance} token={token} />
           )}
-          {activeTab === "onboarding" && (
-            <OnboardingTab onboarding={user.onboarding} />
+          {activeTab === "documents" && (
+            <DocumentsTab documents={user.documents} token={token} />
           )}
         </div>
       </div>
@@ -126,22 +127,8 @@ function OverviewTab({ user }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <InfoCard icon="📧" label="Email" value={user.email} />
-        {/* <InfoCard icon="📱" label="Phone Number" value={user.phoneNumber} /> */}
         <InfoCard icon="🌍" label="Country" value={user.country} />
-        {/* <InfoCard icon="🚀" label="Startup Name" value={user.startupName} /> */}
-        {/* <InfoCard icon="📊" label="Stage" value={user.stage} /> */}
-        {/* <InfoCard icon="🏭" label="Industry" value={user.industry} /> */}
         <InfoCard icon="🎯" label="Sector" value={user.sector} />
-        {/* <InfoCard
-          icon="✅"
-          label="Verified"
-          value={user.isVerified ? "Yes" : "No"}
-        /> */}
-        {/* <InfoCard
-          icon="📝"
-          label="Onboarding Status"
-          value={user.onboardingStatus}
-        /> */}
       </div>
     </div>
   );
@@ -168,13 +155,18 @@ function CACTab({ applications, token }) {
 }
 
 // CAC Application Form Component
+// Only status, adminFeedback, and price are editable
 function CACApplicationForm({ application, index, token }) {
-  const [formData, setFormData] = useState(application);
+  const [editableData, setEditableData] = useState({
+    status: application.status,
+    adminFeedback: application.adminFeedback,
+    price: application.price
+  });
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setEditableData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = async () => {
@@ -188,14 +180,14 @@ function CACApplicationForm({ application, index, token }) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`
           },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(editableData)
         }
       );
       if (!res.ok) throw new Error("Failed to update CAC application");
-      alert("CAC application updated successfully!");
+      toast.success("CAC application updated successfully!");
       setIsEditing(false);
     } catch (err) {
-      alert("Error: " + err.message);
+      toast.error("Error: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -211,7 +203,7 @@ function CACApplicationForm({ application, index, token }) {
           </h3>
         </div>
         <div className="flex items-center gap-3">
-          <StatusBadge status={formData.status} />
+          <StatusBadge status={editableData.status} />
           {!isEditing ? (
             <button
               onClick={() => setIsEditing(true)}
@@ -239,188 +231,136 @@ function CACApplicationForm({ application, index, token }) {
         </div>
       </div>
 
-      {/* Company Information */}
+      {/* Read-only sections */}
       <FormSection title="Company Information" icon="🏢">
-        <FormField
+        <ReadOnlyField
           icon="🏷️"
           label="Company Name"
-          value={formData.companyName}
-          onChange={(v) => handleChange("companyName", v)}
-          disabled={!isEditing}
+          value={application.companyName}
         />
-        <FormField
+        <ReadOnlyField
           icon="📑"
           label="Company Type"
-          value={formData.companyType}
-          onChange={(v) => handleChange("companyType", v)}
-          disabled={!isEditing}
+          value={application.companyType}
         />
-        <FormField
+        <ReadOnlyField
           icon="📧"
           label="Email Address"
-          value={formData.emailAddress}
-          onChange={(v) => handleChange("emailAddress", v)}
-          disabled={!isEditing}
+          value={application.emailAddress}
         />
-        <FormField
+        <ReadOnlyField
           icon="📍"
           label="Registered Office Address"
-          value={formData.registeredOfficeAddress}
-          onChange={(v) => handleChange("registeredOfficeAddress", v)}
-          disabled={!isEditing}
+          value={application.registeredOfficeAddress}
         />
-        <FormField
+        <ReadOnlyField
           icon="🏢"
           label="Head Office Address"
-          value={formData.headOfficeAddress}
-          onChange={(v) => handleChange("headOfficeAddress", v)}
-          disabled={!isEditing}
+          value={application.headOfficeAddress}
         />
       </FormSection>
 
-      {/* Share Capital Information */}
       <FormSection title="Share Capital Information" icon="💰">
-        <FormField
+        <ReadOnlyField
           icon="📊"
           label="Number of Shares"
-          type="number"
-          value={formData.numberOfShares}
-          onChange={(v) => handleChange("numberOfShares", v)}
-          disabled={!isEditing}
+          value={application.numberOfShares}
         />
-        <FormField
+        <ReadOnlyField
           icon="💵"
           label="Price per Share (₦)"
-          value={formData.pricePerShare}
-          onChange={(v) => handleChange("pricePerShare", v)}
-          disabled={!isEditing}
+          value={application.pricePerShare}
         />
-        <FormField
+        <ReadOnlyField
           icon="💰"
           label="Total Share Capital (₦)"
-          value={formData.totalShareCapital}
-          onChange={(v) => handleChange("totalShareCapital", v)}
-          disabled={!isEditing}
+          value={application.totalShareCapital}
         />
-        <FormField
+        <ReadOnlyField
           icon="📝"
           label="Share Capital in Words"
-          value={formData.shareCapitalInWords}
-          onChange={(v) => handleChange("shareCapitalInWords", v)}
-          disabled={!isEditing}
+          value={application.shareCapitalInWords}
         />
       </FormSection>
 
-      {/* Director Information */}
       <FormSection title="Director Information" icon="👔">
-        <FormField
+        <ReadOnlyField
           icon="👤"
           label="Director Name & Tel"
-          value={formData.directorNameAndTel}
-          onChange={(v) => handleChange("directorNameAndTel", v)}
-          disabled={!isEditing}
+          value={application.directorNameAndTel}
         />
         <ImageField
           icon="✍️"
           label="Director Signature"
-          path={formData.directorSignature}
+          path={application.directorSignature}
         />
       </FormSection>
 
-      {/* Secretary Information */}
       <FormSection title="Secretary Information" icon="📋">
-        <FormField
+        <ReadOnlyField
           icon="🏷️"
           label="Secretary Type"
-          value={formData.secretaryType}
-          onChange={(v) => handleChange("secretaryType", v)}
-          disabled={!isEditing}
+          value={application.secretaryType}
         />
-        <FormField
+        <ReadOnlyField
           icon="👤"
           label="Secretary Name"
-          value={formData.secretaryName}
-          onChange={(v) => handleChange("secretaryName", v)}
-          disabled={!isEditing}
+          value={application.secretaryName}
         />
-        <FormField
+        <ReadOnlyField
           icon="📧"
           label="Secretary Email"
-          value={formData.secretaryEmail}
-          onChange={(v) => handleChange("secretaryEmail", v)}
-          disabled={!isEditing}
+          value={application.secretaryEmail}
         />
-        <FormField
+        <ReadOnlyField
           icon="📱"
           label="Secretary Phone"
-          value={formData.secretaryPhone}
-          onChange={(v) => handleChange("secretaryPhone", v)}
-          disabled={!isEditing}
+          value={application.secretaryPhone}
         />
-        <FormField
+        <ReadOnlyField
           icon="📍"
           label="Secretary Address"
-          value={formData.secretaryAddress}
-          onChange={(v) => handleChange("secretaryAddress", v)}
-          disabled={!isEditing}
+          value={application.secretaryAddress}
         />
-        <FormField
+        <ReadOnlyField
           icon="🆔"
           label="Secretary ID Type"
-          value={formData.secretaryIdType}
-          onChange={(v) => handleChange("secretaryIdType", v)}
-          disabled={!isEditing}
+          value={application.secretaryIdType}
         />
         <ImageField
           icon="✍️"
           label="Secretary Signature"
-          path={formData.secretarySignature}
+          path={application.secretarySignature}
         />
       </FormSection>
 
-      {/* Payment Information */}
       <FormSection title="Payment Information" icon="💳">
+        <ReadOnlyField
+          icon="✅"
+          label="Is Paid"
+          value={application.isPaid ? "Yes" : "No"}
+        />
+        <ReadOnlyField
+          icon="📊"
+          label="Payment Status"
+          value={application.paymentStatus}
+        />
+      </FormSection>
+
+      {/* Editable section */}
+      <FormSection title="Admin Controls" icon="🛠️">
         <FormField
           icon="💰"
           label="Price (₦)"
-          value={formData.price}
+          value={editableData.price}
           onChange={(v) => handleChange("price", v)}
           disabled={!isEditing}
         />
         <FormField
-          icon="✅"
-          label="Is Paid"
-          type="select"
-          value={formData.isPaid}
-          onChange={(v) => handleChange("isPaid", v === "true")}
-          disabled={!isEditing}
-          options={[
-            { value: true, label: "Yes" },
-            { value: false, label: "No" }
-          ]}
-        />
-        <FormField
-          icon="📊"
-          label="Payment Status"
-          type="select"
-          value={formData.paymentStatus}
-          onChange={(v) => handleChange("paymentStatus", v)}
-          disabled={!isEditing}
-          options={[
-            { value: "pending", label: "Pending" },
-            { value: "paid", label: "Paid" },
-            { value: "failed", label: "Failed" }
-          ]}
-        />
-      </FormSection>
-
-      {/* Application Status */}
-      <FormSection title="Application Status" icon="📊">
-        <FormField
           icon="🎯"
           label="Status"
           type="select"
-          value={formData.status}
+          value={editableData.status}
           onChange={(v) => handleChange("status", v)}
           disabled={!isEditing}
           options={[
@@ -429,14 +369,16 @@ function CACApplicationForm({ application, index, token }) {
             { value: "rejected", label: "Rejected" }
           ]}
         />
-        <FormField
-          icon="💬"
-          label="Admin Feedback"
-          type="textarea"
-          value={formData.adminFeedback}
-          onChange={(v) => handleChange("adminFeedback", v)}
-          disabled={!isEditing}
-        />
+        <div className="md:col-span-2">
+          <FormField
+            icon="💬"
+            label="Admin Feedback"
+            type="textarea"
+            value={editableData.adminFeedback}
+            onChange={(v) => handleChange("adminFeedback", v)}
+            disabled={!isEditing}
+          />
+        </div>
       </FormSection>
     </div>
   );
@@ -462,14 +404,18 @@ function FIRSTab({ applications, token }) {
   );
 }
 
-// FIRS Application Form Component
+// Only status, adminFeedback, and price are editable
 function FIRSApplicationForm({ application, index, token }) {
-  const [formData, setFormData] = useState(application);
+  const [editableData, setEditableData] = useState({
+    status: application.status,
+    adminFeedback: application.adminFeedback,
+    price: application.price
+  });
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setEditableData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = async () => {
@@ -483,14 +429,14 @@ function FIRSApplicationForm({ application, index, token }) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`
           },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(editableData)
         }
       );
       if (!res.ok) throw new Error("Failed to update FIRS application");
-      alert("FIRS application updated successfully!");
+      toast.success("FIRS application updated successfully!");
       setIsEditing(false);
     } catch (err) {
-      alert("Error: " + err.message);
+      toast.error("Error: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -506,7 +452,7 @@ function FIRSApplicationForm({ application, index, token }) {
           </h3>
         </div>
         <div className="flex items-center gap-3">
-          <StatusBadge status={formData.status} />
+          <StatusBadge status={editableData.status} />
           {!isEditing ? (
             <button
               onClick={() => setIsEditing(true)}
@@ -534,149 +480,102 @@ function FIRSApplicationForm({ application, index, token }) {
         </div>
       </div>
 
-      {/* Taxpayer Information */}
+      {/* Read-only sections */}
       <FormSection title="Taxpayer Information" icon="👤">
-        <FormField
+        <ReadOnlyField
           icon="🏷️"
           label="Taxpayer Name"
-          value={formData.taxpayerName}
-          onChange={(v) => handleChange("taxpayerName", v)}
-          disabled={!isEditing}
+          value={application.taxpayerName}
         />
-        <FormField
+        <ReadOnlyField
           icon="🔢"
           label="RC Number"
-          value={formData.rcNumber}
-          onChange={(v) => handleChange("rcNumber", v)}
-          disabled={!isEditing}
+          value={application.rcNumber}
         />
-        <FormField
+        <ReadOnlyField
           icon="🆔"
           label="Previous TIN"
-          value={formData.previousTin}
-          onChange={(v) => handleChange("previousTin", v)}
-          disabled={!isEditing}
+          value={application.previousTin}
         />
-        <FormField
+        <ReadOnlyField
           icon="🏢"
           label="Tax Office"
-          value={formData.taxOffice}
-          onChange={(v) => handleChange("taxOffice", v)}
-          disabled={!isEditing}
+          value={application.taxOffice}
         />
       </FormSection>
 
-      {/* Business Information */}
       <FormSection title="Business Information" icon="🏭">
-        <FormField
+        <ReadOnlyField
           icon="📝"
           label="Nature of Business"
-          value={formData.natureOfBusiness}
-          onChange={(v) => handleChange("natureOfBusiness", v)}
-          disabled={!isEditing}
+          value={application.natureOfBusiness}
         />
-        <FormField
+        <ReadOnlyField
           icon="💼"
           label="Source of Income"
-          value={formData.sourceOfIncome}
-          onChange={(v) => handleChange("sourceOfIncome", v)}
-          disabled={!isEditing}
+          value={application.sourceOfIncome}
         />
-        <FormField
+        <ReadOnlyField
           icon="📊"
           label="VAT Liability"
-          type="select"
-          value={formData.vatLiability}
-          onChange={(v) => handleChange("vatLiability", v)}
-          disabled={!isEditing}
-          options={[
-            { value: "Yes", label: "Yes" },
-            { value: "No", label: "No" }
-          ]}
+          value={application.vatLiability}
         />
-        <FormField
+        <ReadOnlyField
           icon="📍"
           label="Registered Office Address"
-          value={formData.registeredOfficeAddress}
-          onChange={(v) => handleChange("registeredOfficeAddress", v)}
-          disabled={!isEditing}
+          value={application.registeredOfficeAddress}
         />
-        <FormField
-          icon="🏦"
-          label="Bankers"
-          value={formData.bankers}
-          onChange={(v) => handleChange("bankers", v)}
-          disabled={!isEditing}
-        />
+        <ReadOnlyField icon="🏦" label="Bankers" value={application.bankers} />
       </FormSection>
 
-      {/* Important Dates */}
       <FormSection title="Important Dates" icon="📅">
-        <FormField
+        <ReadOnlyField
           icon="📅"
           label="Date of Incorporation"
-          type="date"
-          value={formData.dateOfIncorporation?.split("T")[0]}
-          onChange={(v) => handleChange("dateOfIncorporation", v)}
-          disabled={!isEditing}
+          value={application.dateOfIncorporation?.split("T")[0]}
         />
-        <FormField
+        <ReadOnlyField
           icon="📅"
           label="Commencement Date"
-          type="date"
-          value={formData.commencementDate?.split("T")[0]}
-          onChange={(v) => handleChange("commencementDate", v)}
-          disabled={!isEditing}
+          value={application.commencementDate?.split("T")[0]}
         />
-        <FormField
+        <ReadOnlyField
           icon="📅"
           label="Accounting Year End"
-          type="date"
-          value={formData.accountingYearEnd?.split("T")[0]}
-          onChange={(v) => handleChange("accountingYearEnd", v)}
-          disabled={!isEditing}
+          value={application.accountingYearEnd?.split("T")[0]}
         />
       </FormSection>
 
-      {/* Documents */}
       <FormSection title="Documents" icon="📄">
         <ImageField
           icon="📄"
           label="Application Letter"
-          path={formData.applicationLetter}
+          path={application.applicationLetter}
         />
       </FormSection>
 
-      {/* Payment Information */}
       <FormSection title="Payment Information" icon="💳">
+        <ReadOnlyField
+          icon="✅"
+          label="Is Paid"
+          value={application.isPaid ? "Yes" : "No"}
+        />
+      </FormSection>
+
+      {/* Editable section */}
+      <FormSection title="Admin Controls" icon="🛠️">
         <FormField
           icon="💰"
           label="Price (₦)"
-          value={formData.price}
+          value={editableData.price}
           onChange={(v) => handleChange("price", v)}
           disabled={!isEditing}
         />
         <FormField
-          icon="✅"
-          label="Is Paid"
-          type="select"
-          value={formData.isPaid}
-          onChange={(v) => handleChange("isPaid", v === "true")}
-          disabled={!isEditing}
-          options={[
-            { value: true, label: "Yes" },
-            { value: false, label: "No" }
-          ]}
-        />
-      </FormSection>
-
-      {/* Application Status */}
-      <FormSection title="Application Status" icon="📊">
-        <FormField
           icon="🎯"
           label="Status"
           type="select"
-          value={formData.status}
+          value={editableData.status}
           onChange={(v) => handleChange("status", v)}
           disabled={!isEditing}
           options={[
@@ -685,14 +584,16 @@ function FIRSApplicationForm({ application, index, token }) {
             { value: "rejected", label: "Rejected" }
           ]}
         />
-        <FormField
-          icon="💬"
-          label="Admin Feedback"
-          type="textarea"
-          value={formData.adminFeedback}
-          onChange={(v) => handleChange("adminFeedback", v)}
-          disabled={!isEditing}
-        />
+        <div className="md:col-span-2">
+          <FormField
+            icon="💬"
+            label="Admin Feedback"
+            type="textarea"
+            value={editableData.adminFeedback}
+            onChange={(v) => handleChange("adminFeedback", v)}
+            disabled={!isEditing}
+          />
+        </div>
       </FormSection>
     </div>
   );
@@ -718,14 +619,18 @@ function SCUMLTab({ applications, token }) {
   );
 }
 
-// SCUML Application Form Component
+// Only status, adminFeedback, and price are editable
 function SCUMLApplicationForm({ application, index, token }) {
-  const [formData, setFormData] = useState(application);
+  const [editableData, setEditableData] = useState({
+    status: application.status,
+    adminFeedback: application.adminFeedback,
+    price: application.price
+  });
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setEditableData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = async () => {
@@ -739,14 +644,14 @@ function SCUMLApplicationForm({ application, index, token }) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`
           },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(editableData)
         }
       );
       if (!res.ok) throw new Error("Failed to update SCUML application");
-      alert("SCUML application updated successfully!");
+      toast.success("SCUML application updated successfully!");
       setIsEditing(false);
     } catch (err) {
-      alert("Error: " + err.message);
+      toast.error("Error: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -762,7 +667,7 @@ function SCUMLApplicationForm({ application, index, token }) {
           </h3>
         </div>
         <div className="flex items-center gap-3">
-          <StatusBadge status={formData.status} />
+          <StatusBadge status={editableData.status} />
           {!isEditing ? (
             <button
               onClick={() => setIsEditing(true)}
@@ -790,132 +695,81 @@ function SCUMLApplicationForm({ application, index, token }) {
         </div>
       </div>
 
-      {/* Business Information */}
+      {/* Read-only sections */}
       <FormSection title="Business Information" icon="🏢">
-        <FormField
+        <ReadOnlyField
           icon="🏷️"
           label="Business Name"
-          value={formData.businessName}
-          onChange={(v) => handleChange("businessName", v)}
-          disabled={!isEditing}
+          value={application.businessName}
         />
-        <FormField
+        <ReadOnlyField
           icon="📑"
           label="Business Category"
-          value={formData.businessCategory}
-          onChange={(v) => handleChange("businessCategory", v)}
-          disabled={!isEditing}
+          value={application.businessCategory}
         />
-        <FormField
+        <ReadOnlyField
           icon="🔢"
           label="RC Number"
-          value={formData.rcNumber}
-          onChange={(v) => handleChange("rcNumber", v)}
-          disabled={!isEditing}
+          value={application.rcNumber}
         />
-        <FormField
-          icon="🆔"
-          label="TIN"
-          value={formData.tin}
-          onChange={(v) => handleChange("tin", v)}
-          disabled={!isEditing}
-        />
-        <FormField
-          icon="📧"
-          label="Email"
-          value={formData.email}
-          onChange={(v) => handleChange("email", v)}
-          disabled={!isEditing}
-        />
-        {/* <FormField
-          icon="📱"
-          label="Phone Number"
-          value={formData.phoneNumber}
-          onChange={(v) => handleChange("phoneNumber", v)}
-          disabled={!isEditing}
-        /> */}
+        <ReadOnlyField icon="🆔" label="TIN" value={application.tin} />
+        <ReadOnlyField icon="📧" label="Email" value={application.email} />
       </FormSection>
 
-      {/* Addresses */}
       <FormSection title="Addresses" icon="📍">
-        <FormField
+        <ReadOnlyField
           icon="🏢"
           label="Registered Office Address"
-          value={formData.registeredOfficeAddress}
-          onChange={(v) => handleChange("registeredOfficeAddress", v)}
-          disabled={!isEditing}
+          value={application.registeredOfficeAddress}
         />
-        <FormField
-          icon="🏦"
-          label="Bankers"
-          value={formData.bankers}
-          onChange={(v) => handleChange("bankers", v)}
-          disabled={!isEditing}
-        />
+        <ReadOnlyField icon="🏦" label="Bankers" value={application.bankers} />
       </FormSection>
 
-      {/* Compliance Officer */}
       <FormSection title="Compliance Officer" icon="👔">
-        <FormField
+        <ReadOnlyField
           icon="👤"
           label="Name"
-          value={formData.complianceOfficerName}
-          onChange={(v) => handleChange("complianceOfficerName", v)}
-          disabled={!isEditing}
+          value={application.complianceOfficerName}
         />
-        <FormField
+        <ReadOnlyField
           icon="💼"
           label="Designation"
-          value={formData.complianceOfficerDesignation}
-          onChange={(v) => handleChange("complianceOfficerDesignation", v)}
-          disabled={!isEditing}
+          value={application.complianceOfficerDesignation}
         />
-        <FormField
+        <ReadOnlyField
           icon="📧"
           label="Email"
-          value={formData.complianceOfficerEmail}
-          onChange={(v) => handleChange("complianceOfficerEmail", v)}
-          disabled={!isEditing}
+          value={application.complianceOfficerEmail}
         />
-        <FormField
+        <ReadOnlyField
           icon="📱"
           label="Phone"
-          value={formData.complianceOfficerPhone}
-          onChange={(v) => handleChange("complianceOfficerPhone", v)}
-          disabled={!isEditing}
+          value={application.complianceOfficerPhone}
         />
       </FormSection>
 
-      {/* Payment Information */}
       <FormSection title="Payment Information" icon="💳">
+        <ReadOnlyField
+          icon="✅"
+          label="Is Paid"
+          value={application.isPaid ? "Yes" : "No"}
+        />
+      </FormSection>
+
+      {/* Editable section */}
+      <FormSection title="Admin Controls" icon="🛠️">
         <FormField
           icon="💰"
           label="Price (₦)"
-          value={formData.price}
+          value={editableData.price}
           onChange={(v) => handleChange("price", v)}
           disabled={!isEditing}
         />
         <FormField
-          icon="✅"
-          label="Is Paid"
-          type="select"
-          value={formData.isPaid}
-          onChange={(v) => handleChange("isPaid", v === "true")}
-          disabled={!isEditing}
-          options={[
-            { value: true, label: "Yes" },
-            { value: false, label: "No" }
-          ]}
-        />
-      </FormSection>
-
-      {/* Application Status */}
-      <FormSection title="Application Status" icon="📊">
-        <FormField
           icon="🎯"
           label="Status"
           type="select"
-          value={formData.status}
+          value={editableData.status}
           onChange={(v) => handleChange("status", v)}
           disabled={!isEditing}
           options={[
@@ -924,109 +778,360 @@ function SCUMLApplicationForm({ application, index, token }) {
             { value: "rejected", label: "Rejected" }
           ]}
         />
-        <FormField
-          icon="💬"
-          label="Admin Feedback"
-          type="textarea"
-          value={formData.adminFeedback}
-          onChange={(v) => handleChange("adminFeedback", v)}
-          disabled={!isEditing}
-        />
+        <div className="md:col-span-2">
+          <FormField
+            icon="💬"
+            label="Admin Feedback"
+            type="textarea"
+            value={editableData.adminFeedback}
+            onChange={(v) => handleChange("adminFeedback", v)}
+            disabled={!isEditing}
+          />
+        </div>
       </FormSection>
     </div>
   );
 }
 
-// Compliance Tab
-function ComplianceTab({ compliance }) {
+// ─── COMPLIANCE TAB — READ ONLY ────────────────────────────────────────────────
+function ComplianceTab({ compliance, token }) {
   if (!compliance) {
     return <EmptyState message="No compliance information found" icon="✅" />;
   }
 
+  // Parse formData grants JSON for display
+  let parsedGrants = {};
+  try {
+    parsedGrants = JSON.parse(compliance.formData || "{}");
+  } catch {}
+
+  const fileUrl = compliance.fileUrl
+    ? compliance.fileUrl.startsWith("http")
+      ? compliance.fileUrl
+      : `${IMAGE_URL}${compliance.fileUrl}`
+    : null;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-6">
-        <span className="text-4xl">✅</span>
-        <h2 className="text-2xl font-bold text-gray-900">
-          Compliance Information
-        </h2>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <span className="text-4xl">✅</span>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Compliance Information
+            </h2>
+            <p className="text-sm text-gray-500 mt-0.5">{compliance.title}</p>
+          </div>
+        </div>
+        <StatusBadge status={compliance.documentStatus} />
       </div>
-      <div className="border border-gray-200 rounded-lg p-6">
+
+      <div className="border border-gray-200 rounded-lg p-6 space-y-6">
+        {/* Overview cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <InfoCard icon="📋" label="Title" value={compliance.title} />
           <InfoCard icon="👤" label="Full Name" value={compliance.fullName} />
           <InfoCard icon="🏭" label="Sector" value={compliance.sector} />
           <InfoCard
-            icon="📊"
-            label="Compliance Status"
-            value={compliance.complianceStatus}
+            icon="💰"
+            label="Price"
+            value={compliance.price === 0 ? "Free" : `₦${compliance.price}`}
           />
-          <InfoCard icon="💰" label="Cost" value={compliance.cost} />
+          <InfoCard icon="🤖" label="Source" value={compliance.source} />
           <InfoCard
             icon="✅"
             label="Authorized"
             value={compliance.authorized ? "Yes" : "No"}
           />
+          <InfoCard icon="📅" label="Issue Date" value={compliance.issueDate} />
+          <InfoCard
+            icon="📅"
+            label="Expiry Date"
+            value={compliance.expiryDate || "N/A"}
+          />
+          <InfoCard
+            icon="📅"
+            label="Authorized At"
+            value={
+              compliance.authorizedAt
+                ? new Date(compliance.authorizedAt).toLocaleDateString()
+                : "N/A"
+            }
+          />
+          <InfoCard
+            icon="🎯"
+            label="Compliance Status"
+            value={compliance.complianceStatus}
+          />
+          <InfoCard
+            icon="📄"
+            label="Document Status"
+            value={compliance.documentStatus}
+          />
+          <InfoCard
+            icon="🔢"
+            label="Document Number"
+            value={compliance.documentNumber}
+          />
+          <InfoCard
+            icon="📅"
+            label="Completed Date"
+            value={
+              compliance.completedDate
+                ? compliance.completedDate.split("T")[0]
+                : "N/A"
+            }
+          />
         </div>
 
-        <div className="mt-6">
-          <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
+        {/* Description */}
+        <div>
+          <h4 className="font-semibold text-lg mb-3 flex items-center gap-2 text-gray-800 border-b pb-2">
             <span>📝</span> Description
           </h4>
           <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">
             {compliance.description}
           </p>
         </div>
+
+        {/* Submitted Form Data (grants) */}
+        {Object.keys(parsedGrants).length > 0 && (
+          <div>
+            <h4 className="font-semibold text-lg mb-4 flex items-center gap-2 text-gray-800 border-b pb-2">
+              <span>📋</span> Submitted Form Data
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.entries(parsedGrants).map(([key, val]) => {
+                if (key === "file" || (typeof val === "object" && val !== null))
+                  return null;
+                const label = key
+                  .replace(/([A-Z])/g, " $1")
+                  .replace(/^./, (s) => s.toUpperCase());
+                return (
+                  <InfoCard
+                    key={key}
+                    icon="📝"
+                    label={label}
+                    value={String(val)}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Uploaded File */}
+        {fileUrl && (
+          <div>
+            <h4 className="font-semibold text-lg mb-4 flex items-center gap-2 text-gray-800 border-b pb-2">
+              <span>📁</span> Uploaded Document
+            </h4>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <img
+                src={fileUrl}
+                alt="Compliance document"
+                className="max-w-full h-auto rounded-lg border border-gray-300 shadow-sm hover:shadow-md transition-shadow"
+                style={{ maxHeight: "400px" }}
+                onError={(e) => {
+                  e.target.style.display = "none";
+                }}
+              />
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 mt-3 text-blue-600 hover:text-blue-800 text-sm font-medium"
+              >
+                <span>🔗</span> View / Download Document
+              </a>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// Onboarding Tab
-function OnboardingTab({ onboarding }) {
-  if (!onboarding) {
-    return <EmptyState message="No onboarding information found" icon="🚀" />;
+// ─── DOCUMENTS TAB — READ ONLY ─────────────────────────────────────────────────
+function DocumentsTab({ documents, token }) {
+  if (!documents || documents.length === 0) {
+    return <EmptyState message="No documents found" icon="📁" />;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-6">
-        <span className="text-4xl">🚀</span>
-        <h2 className="text-2xl font-bold text-gray-900">
-          Onboarding Information
-        </h2>
+        <span className="text-4xl">📁</span>
+        <h2 className="text-2xl font-bold text-gray-900">Documents</h2>
+        <span className="ml-2 bg-blue-100 text-blue-700 text-sm font-semibold px-3 py-1 rounded-full">
+          {documents.length}
+        </span>
       </div>
-      <div className="border border-gray-200 rounded-lg p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <InfoCard icon="📊" label="Step" value={onboarding.step} />
-          <InfoCard
-            icon="🆔"
-            label="Review ID"
-            value={onboarding.reviewId || "N/A"}
-          />
-        </div>
 
-        <div className="mt-6">
-          <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
-            <span>❓</span> Question
-          </h4>
-          <p className="text-gray-700 bg-gray-50 p-4 rounded-lg mb-4">
-            {onboarding.question}
-          </p>
-
-          <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
-            <span>💬</span> Answer
-          </h4>
-          <p className="text-gray-700 bg-blue-50 p-4 rounded-lg">
-            {onboarding.answer}
-          </p>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {documents.map((doc, index) => (
+          <DocumentCard key={doc.id} doc={doc} index={index} />
+        ))}
       </div>
     </div>
   );
 }
 
-// Helper Components
+// Read-only document card
+function DocumentCard({ doc, index }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Parse grants JSON
+  let parsedGrants = {};
+  try {
+    parsedGrants = JSON.parse(doc.grants || "{}");
+  } catch {}
+
+  const fileUrl = doc.fileUrl
+    ? doc.fileUrl.startsWith("http")
+      ? doc.fileUrl
+      : `${IMAGE_URL}${doc.fileUrl}`
+    : null;
+
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      {/* Card Header */}
+      <div className="bg-gray-50 px-5 py-4 flex items-center justify-between border-b border-gray-200">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-2xl flex-shrink-0">📄</span>
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 truncate">{doc.name}</p>
+            <p className="text-xs text-gray-500 truncate">{doc.fullName}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+          <StatusBadge status={doc.status} />
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+            title={expanded ? "Collapse" : "Expand"}
+          >
+            {expanded ? "▲" : "▼"}
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Info (always visible) */}
+      <div className="px-5 py-3 grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <span className="text-gray-500">Issue Date:</span>{" "}
+          <span className="font-medium">{doc.issueDate || "N/A"}</span>
+        </div>
+        <div>
+          <span className="text-gray-500">Expiry:</span>{" "}
+          <span className="font-medium">{doc.expiryDate || "N/A"}</span>
+        </div>
+        <div>
+          <span className="text-gray-500">Doc Number:</span>{" "}
+          <span className="font-medium">{doc.documentNumber || "N/A"}</span>
+        </div>
+        {fileUrl && (
+          <div>
+            <a
+              href={fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+            >
+              <span>🔗</span> View File
+            </a>
+          </div>
+        )}
+      </div>
+
+      {/* Expanded Content — read only */}
+      {expanded && (
+        <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-4">
+          {/* Status & Dates */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <InfoCard icon="🎯" label="Status" value={doc.status} />
+            <InfoCard
+              icon="🔢"
+              label="Document Number"
+              value={doc.documentNumber}
+            />
+            <InfoCard
+              icon="📅"
+              label="Issue Date"
+              value={doc.issueDate?.split("T")[0]}
+            />
+            <InfoCard
+              icon="📅"
+              label="Expiry Date"
+              value={doc.expiryDate?.split("T")[0]}
+            />
+          </div>
+
+          {/* Submitted Grant Data */}
+          {Object.keys(parsedGrants).length > 0 && (
+            <div>
+              <h5 className="font-semibold text-sm text-gray-700 mb-3 flex items-center gap-2">
+                <span>📋</span> Submitted Information
+              </h5>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {Object.entries(parsedGrants).map(([key, val]) => {
+                  if (
+                    key === "file" ||
+                    (typeof val === "object" && val !== null)
+                  )
+                    return null;
+                  const label = key
+                    .replace(/([A-Z])/g, " $1")
+                    .replace(/^./, (s) => s.toUpperCase());
+                  return (
+                    <InfoCard
+                      key={key}
+                      icon="📝"
+                      label={label}
+                      value={String(val)}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* File Preview */}
+          {fileUrl && (
+            <div>
+              <h5 className="font-semibold text-sm text-gray-700 mb-3 flex items-center gap-2">
+                <span>🖼️</span> Uploaded File
+              </h5>
+              <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
+                <img
+                  src={fileUrl}
+                  alt={doc.name}
+                  className="max-w-full h-auto rounded border border-gray-300 shadow-sm"
+                  style={{ maxHeight: "250px" }}
+                  onError={(e) => {
+                    e.target.style.display = "none";
+                  }}
+                />
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 mt-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  <span>🔗</span> View Full File
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── HELPER COMPONENTS ─────────────────────────────────────────────────────────
+
 function FormSection({ title, icon, children }) {
   return (
     <div className="mt-6">
@@ -1035,6 +1140,19 @@ function FormSection({ title, icon, children }) {
         {title}
       </h4>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>
+    </div>
+  );
+}
+
+// Read-only display field (styled like FormField but never editable)
+function ReadOnlyField({ icon, label, value }) {
+  return (
+    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+        <span>{icon}</span>
+        {label}
+      </label>
+      <p className="w-full px-3 py-2 text-gray-800 text-sm">{value || "N/A"}</p>
     </div>
   );
 }
@@ -1144,17 +1262,27 @@ function InfoCard({ icon, label, value }) {
 function StatusBadge({ status }) {
   const statusColors = {
     approved: "bg-green-100 text-green-800",
+    Active: "bg-green-100 text-green-800",
     pending: "bg-yellow-100 text-yellow-800",
+    Pending: "bg-yellow-100 text-yellow-800",
     rejected: "bg-red-100 text-red-800",
+    Revoked: "bg-red-100 text-red-800",
+    Expired: "bg-red-100 text-red-800",
     needs_fine_tuning: "bg-orange-100 text-orange-800",
+    Inactive: "bg-gray-100 text-gray-800",
     "Not Started": "bg-gray-100 text-gray-800"
   };
 
   const statusIcons = {
     approved: "✅",
+    Active: "✅",
     pending: "⏳",
+    Pending: "⏳",
     rejected: "❌",
+    Revoked: "🚫",
+    Expired: "⌛",
     needs_fine_tuning: "⚠️",
+    Inactive: "⭕",
     "Not Started": "⭕"
   };
 
@@ -1176,3 +1304,4 @@ function EmptyState({ message, icon }) {
     </div>
   );
 }
+``

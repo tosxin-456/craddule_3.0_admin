@@ -87,21 +87,21 @@ export default function AdminConsoleLayout() {
               icon={<Users className="w-5 h-5" />}
               onNavigate={() => setSidebarOpen(false)}
             />
-            <AdminLink
+            {/* <AdminLink
               to="/admin/onboarding"
               label="Onboarding Reviews"
               icon={<ShieldCheck className="w-5 h-5" />}
               onNavigate={() => setSidebarOpen(false)}
-            />
+            /> */}
           </NavSection>
 
           <NavSection label="Content & Compliance">
-            <AdminLink
+            {/* <AdminLink
               to="/admin/documents"
               label="Documents Review"
               icon={<FileSearch className="w-5 h-5" />}
               onNavigate={() => setSidebarOpen(false)}
-            />
+            /> */}
             <AdminLink
               to="/admin/compliance"
               label="Compliance "

@@ -21,6 +21,7 @@ import {
   Clock
 } from "lucide-react";
 import { API_BASE_URL } from "../config/apiConfig";
+import toast from "react-hot-toast";
 
 const styles = {
   overlay: {
@@ -279,7 +280,7 @@ export default function UserDetailsModal({ userId, onClose }) {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      alert("Failed to download document: " + err.message);
+      toast.error("Failed to download document: " + err.message);
     }
   };
 

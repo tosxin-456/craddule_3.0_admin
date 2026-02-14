@@ -916,7 +916,7 @@ export default function AdminCacApplications() {
                     {selectedApp.directorSignature && (
                       <ImageDocumentCard
                         label="Director Signature"
-                        imagePath={selectedApp.directorSignature}
+                        imagePath={`${IMAGE_URL}/selectedApp.directorSignature`}
                         onView={() =>
                           openImageModal(selectedApp.directorSignature)
                         }

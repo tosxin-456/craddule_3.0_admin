@@ -33,6 +33,7 @@ export default function AdminUserDetails() {
     fetchUser();
   }, [userId, token]);
 
+
   if (loading)
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -193,6 +194,10 @@ function CACApplicationForm({ application, index, token }) {
     }
   };
 
+  const directors =
+    typeof application.directors === "string"
+      ? JSON.parse(application.directors)
+      : application.directors;
   return (
     <div className="border border-gray-200 rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
@@ -295,6 +300,102 @@ function CACApplicationForm({ application, index, token }) {
           path={application.directorSignature}
         />
       </FormSection>
+
+      {/* <FormSection> */}
+      {/* Directors Details */}
+      {application.directors && directors && directors.length > 0 && (
+        <FormSection title="Directors Details" icon="🧑‍💼">
+          <div className="md:col-span-2 flex flex-wrap gap-6">
+            {" "}
+            {/* ← add md:col-span-2 */}
+            {directors.map((director, idx) => (
+              <div
+                key={idx}
+                className="flex-1 min-w-[300px] border border-gray-200 rounded-lg p-4 bg-gray-50 flex flex-col gap-3"
+              >
+                <h4 className="font-semibold text-lg mb-2">
+                  Director {idx + 1}
+                </h4>
+
+                <ReadOnlyField
+                  icon="👤"
+                  label="Full Name"
+                  value={director.fullName}
+                />
+                <ReadOnlyField icon="📧" label="Email" value={director.email} />
+                <ReadOnlyField
+                  icon="📱"
+                  label="Phone"
+                  value={director.phoneNo}
+                />
+                <ReadOnlyField
+                  icon="🏠"
+                  label="Residential Address"
+                  value={director.residentialAddress}
+                />
+                <ReadOnlyField icon="🌆" label="City" value={director.city} />
+                <ReadOnlyField icon="🏙️" label="State" value={director.state} />
+                <ReadOnlyField
+                  icon="🌍"
+                  label="Country"
+                  value={director.country}
+                />
+                <ReadOnlyField
+                  icon="🆔"
+                  label="ID Type"
+                  value={director.idType}
+                />
+                <ReadOnlyField
+                  icon="🆔"
+                  label="ID Number"
+                  value={director.idNo}
+                />
+                <ReadOnlyField
+                  icon="🎂"
+                  label="Date of Birth"
+                  value={director.dateOfBirth}
+                />
+                <ReadOnlyField
+                  icon="⚥"
+                  label="Gender"
+                  value={director.gender}
+                />
+                <ReadOnlyField
+                  icon="📅"
+                  label="Consent Date"
+                  value={director.consentDate}
+                />
+
+                {/* Uploaded Documents */}
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {director.signatureUrl && (
+                    <ImageField
+                      icon="✍️"
+                      label="Signature"
+                      path={director.signatureUrl}
+                    />
+                  )}
+                  {director.proofOfIdentityUrl && (
+                    <ImageField
+                      icon="🪪"
+                      label="Proof of Identity"
+                      path={director.proofOfIdentityUrl}
+                    />
+                  )}
+                  {director.utilityBillUrl && (
+                    <ImageField
+                      icon="🧾"
+                      label="Utility Bill / Proof of Address"
+                      path={director.utilityBillUrl}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </FormSection>
+      )}
+      {/* </FormSection> */}
 
       <FormSection title="Secretary Information" icon="📋">
         <ReadOnlyField
@@ -1304,4 +1405,3 @@ function EmptyState({ message, icon }) {
     </div>
   );
 }
-``

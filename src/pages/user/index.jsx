@@ -64,6 +64,7 @@ export default function AdminUsers() {
       setLoading(false);
     }
   };
+  console.log(users);
 
   const fetchStats = async () => {
     try {
@@ -135,16 +136,20 @@ export default function AdminUsers() {
   const currentUsers = filteredUsers.slice(indexOfFirstUser, indexOfLastUser);
 
   // ── Excel Export ─────────────────────────────────────────────────────────────
-  const toRows = (list) =>
-    list.map((user, index) => ({
-      "#": index + 1,
-      "Full Name": user.fullName || "",
-      Email: user.email || "",
-      "Phone Number": user.phoneNumber || user.phone || "",
-      "Startup Name": user.startupName || "",
-      Sector: user.sector || "",
-      "Onboarding Status": user.onboardingStatus || ""
-    }));
+const toRows = (list) =>
+  list.map((user, index) => ({
+    "#": index + 1,
+    "Full Name": user.fullName || "",
+    Email: user.email || "",
+    "Phone Number": user.phoneNumber || user.phone || "",
+    Country: user.country || "",
+    Industry: user.industry || "",
+    Sector: user.sector || "",
+    "Startup Name": user.startupName || "",
+    "Date Joined": user.createdAt
+      ? new Date(user.createdAt).toLocaleDateString()
+      : ""
+  }));
 
   const buildSheet = (rows) => {
     if (!rows.length)
@@ -188,6 +193,10 @@ export default function AdminUsers() {
       // No funded users yet — export empty sheet with correct headers
       XLSX.utils.book_append_sheet(wb, buildSheet([]), "Users Funded");
       XLSX.writeFile(wb, `users_funded_${date}.xlsx`);
+    } else if (type === "strategy") {
+      // No strategy users yet — export empty sheet with correct headers
+      XLSX.utils.book_append_sheet(wb, buildSheet([]), "Users With Strategy");
+      XLSX.writeFile(wb, `users_strategy_${date}.xlsx`);
     }
   };
 
@@ -232,11 +241,18 @@ export default function AdminUsers() {
             color="green"
           />
           <StatsCard
+            icon="📋"
+            label="Users With Strategy"
+            value={0}
+            loading={false}
+            color="orange"
+          />
+          <StatsCard
             icon="💰"
             label="Users Funded"
             value={0}
             loading={false}
-            color="orange"
+            color="red"
           />
         </div>
 
@@ -313,6 +329,17 @@ export default function AdminUsers() {
                   <span className="text-base">💰</span>
                   <div>
                     <div className="font-medium">Users Funded</div>
+                    <div className="text-xs text-gray-400">0 users</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleExport("strategy")}
+                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 border-t border-gray-100 transition-colors"
+                >
+                  <span className="text-base">📋</span>
+                  <div>
+                    <div className="font-medium">Users With Strategy</div>
                     <div className="text-xs text-gray-400">0 users</div>
                   </div>
                 </button>
@@ -532,10 +559,17 @@ function StatsCard({ icon, label, value, loading, color = "blue" }) {
       iconBg: "bg-orange-100",
       text: "text-orange-700",
       value: "text-orange-900"
+    },
+    red: {
+      bg: "bg-red-50",
+      border: "border-red-200",
+      iconBg: "bg-red-100",
+      text: "text-red-700",
+      value: "text-red-900"
     }
   };
 
-  const c = colorMap[color];
+  const c = colorMap[color] || colorMap.blue;
 
   return (
     <div

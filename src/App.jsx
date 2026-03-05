@@ -16,7 +16,10 @@ import AdminCacApplications from "./pages/cac applications";
 import AdminFirsApplications from "./pages/firs applications";
 import AdminSculmApplications from "./pages/sculm applications";
 import AdminUserDetails from "./pages/user details";
-// import DashboardHome from "./pages/Dashboard";
+import ReviewersPage from "./pages/reviwers page";
+import UserRequestsPage from "./pages/users strategy session";
+import StrategyPage from "./pages/strategy sessions";
+// import AdminStrategySessions from "./pages/users strategy session";
 // import FounderProfile from "./pages/founder profile";
 // import FounderSettings from "./pages/settings";
 // import FounderTickets from "./pages/ticketing";
@@ -61,6 +64,10 @@ function App() {
           <Route path="settings" element={<AdminSettings />} />
           <Route path="cac" element={<AdminCacApplications />} />
           <Route path="firs" element={<AdminFirsApplications />} />
+          <Route path="strategy" element={<StrategyPage />} />
+          <Route path="users-strategy" element={<UserRequestsPage />} />
+          <Route path="reviewers" element={<ReviewersPage />} />
+
           <Route path="sculm" element={<AdminSculmApplications />} />
           <Route path="users/:userId" element={<AdminUserDetails />} />
         </Route>

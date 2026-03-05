@@ -13,7 +13,9 @@ import {
   ChevronRight,
   LogOut,
   Lock,
-  Sparkles
+  Sparkles,
+  Target,
+  Users2
 } from "lucide-react";
 import logo from "../assets/logo.png";
 
@@ -106,6 +108,33 @@ export default function AdminConsoleLayout() {
               to="/admin/compliance"
               label="Compliance "
               icon={<Lock className="w-5 h-5" />}
+              onNavigate={() => setSidebarOpen(false)}
+            />
+          </NavSection>
+
+          <NavSection label="Phase 2">
+            {/* <AdminLink
+              to="/admin/documents"
+              label="Documents Review"
+              icon={<FileSearch className="w-5 h-5" />}
+              onNavigate={() => setSidebarOpen(false)}
+            /> */}
+            <AdminLink
+              to="/admin/strategy"
+              label="Strategy "
+              icon={<Target className="w-5 h-5" />}
+              onNavigate={() => setSidebarOpen(false)}
+            />
+            <AdminLink
+              to="/admin/reviewers"
+              label="Reviewers "
+              icon={<Users2 className="w-5 h-5" />}
+              onNavigate={() => setSidebarOpen(false)}
+            />
+            <AdminLink
+              to="/admin/users-strategy"
+              label="Users Strategy "
+              icon={<Target className="w-5 h-5" />}
               onNavigate={() => setSidebarOpen(false)}
             />
           </NavSection>
